@@ -100,13 +100,14 @@ LAKES = {
 }
 
 # Overlay anchors on the Michigan Sea Grant profile, as fractions of image size.
+# Centres sit in the lake water (Superior, Michigan hole, Erie, Ontario).
 PROFILE_ANCHORS = {
-    "superior": (0.148, 0.40),
-    "huron": (0.288, 0.29),
-    "michigan": (0.305, 0.64),
+    "superior": (0.112, 0.555),
+    "huron": (0.278, 0.57),
+    "michigan": (0.278, 0.685),
     "st_clair": (0.418, 0.22),
-    "erie": (0.468, 0.37),
-    "ontario": (0.575, 0.48),
+    "erie": (0.448, 0.43),
+    "ontario": (0.555, 0.57),
 }
 
 # Water-basin clips for the century animation (fractions of the profile graphic).
@@ -1106,10 +1107,10 @@ def render_profile(snap: dict) -> None:
     scale = 2
     im = im.resize((im.width * scale, im.height * scale), Image.Resampling.LANCZOS)
     draw = ImageDraw.Draw(im, "RGBA")
-    font_sm = load_font(15)
-    font_md = load_font(18, bold=True)
-    font_lg = load_font(22, bold=True)
-    font_tiny = load_font(13)
+    font_sm = load_font(13)
+    font_md = load_font(15, bold=True)
+    font_lg = load_font(18, bold=True)
+    font_tiny = load_font(12)
 
     w, h = im.size
     # Caption bar
@@ -1125,27 +1126,27 @@ def render_profile(snap: dict) -> None:
         lake = snap["lakes"].get(key) or {}
         igld = lake.get("igld85")
         x, y = int(fx * w), int(fy * h)
-        card_w, card_h = 198, 104
+        card_w, card_h = (148, 78) if key == "st_clair" else (158, 82)
         x0, y0 = x - card_w // 2, y - card_h // 2
         x0 = max(8, min(w - card_w - 8, x0))
         y0 = max(8, min(h - card_h - 44, y0))
-        draw.rounded_rectangle((x0, y0, x0 + card_w, y0 + card_h), radius=10, fill=(16, 40, 52, 220), outline=(142, 184, 200, 220), width=2)
+        draw.rounded_rectangle((x0, y0, x0 + card_w, y0 + card_h), radius=8, fill=(16, 40, 52, 220), outline=(142, 184, 200, 220), width=2)
         title = lake.get("label") or key.title()
-        draw.text((x0 + 10, y0 + 6), title, font=font_md, fill=(255, 255, 255, 255))
+        draw.text((x0 + 8, y0 + 4), title, font=font_md, fill=(255, 255, 255, 255))
         if igld is None:
-            draw.text((x0 + 10, y0 + 36), "no data", font=font_sm, fill=(183, 208, 218, 255))
+            draw.text((x0 + 8, y0 + 28), "no data", font=font_sm, fill=(183, 208, 218, 255))
             continue
         vs = lake.get("vs_lwd_cm") or 0
-        draw.text((x0 + 10, y0 + 28), f"{igld:.2f} m IGLD", font=font_lg, fill=(255, 255, 255, 255))
+        draw.text((x0 + 8, y0 + 22), f"{igld:.2f} m IGLD", font=font_lg, fill=(255, 255, 255, 255))
         vs_color = (125, 206, 160, 255) if vs >= 0 else (224, 122, 95, 255)
-        draw.text((x0 + 10, y0 + 52), f"{vs:+.0f} cm vs LWD", font=font_sm, fill=vs_color)
+        draw.text((x0 + 8, y0 + 42), f"{vs:+.0f} cm vs LWD", font=font_sm, fill=vs_color)
         a24, c24 = _arrow(lake.get("d24_cm"), 0.4)
         a7, c7 = _arrow(lake.get("d7_cm"), 1.0)
         d24 = lake.get("d24_cm")
         d7 = lake.get("d7_cm")
         t24 = "n/a" if d24 is None else f"{d24:+.1f} cm"
         t7 = "n/a" if d7 is None else f"{d7:+.1f} cm"
-        draw.text((x0 + 10, y0 + 70), f"{a24} 24h {t24}   {a7} 7d {t7}", font=font_tiny, fill=(183, 208, 218, 255))
+        draw.text((x0 + 8, y0 + 58), f"{a24} 24h {t24}  {a7} 7d {t7}", font=font_tiny, fill=(183, 208, 218, 255))
 
     im.convert("RGB").save(PROFILE_PNG, "PNG", optimize=True)
 
@@ -1613,12 +1614,12 @@ def render_html(snap: dict) -> None:
     .ticker.up {{ color:#0b6e4f; }}
     .ticker.down {{ color:#c45c26; }}
     .ticker.flat {{ color:#5a7a86; font-size:14px; }}
-    .data-fresh {{ font-family:Arial,Helvetica,sans-serif; text-align:right; min-width:168px; }}
+    .data-fresh {{ font-family:Arial,Helvetica,sans-serif; text-align:left; width:100%; margin:16px 0 0 0; }}
     .data-fresh-heading {{ margin:0 0 8px 0; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#8eb8c8; }}
-    .gauge-fresh {{ margin:0 0 8px 0; }}
-    .gauge-fresh:last-child {{ margin-bottom:0; }}
+    .data-fresh-row {{ display:flex; flex-wrap:wrap; gap:10px 8px; }}
+    .gauge-fresh {{ flex:1 1 0; min-width:110px; margin:0; padding:0 10px 0 0; box-sizing:border-box; }}
     .gauge-fresh-name {{ margin:0; font-size:10px; letter-spacing:0.04em; text-transform:uppercase; color:#8eb8c8; }}
-    .gauge-fresh-age {{ margin:2px 0 0 0; font-size:13px; font-weight:700; line-height:1.2; }}
+    .gauge-fresh-age {{ margin:3px 0 0 0; font-size:13px; font-weight:700; line-height:1.2; }}
     .gauge-fresh-age.fresh-ok {{ color:#7dcea0; }}
     .gauge-fresh-age.fresh-warn {{ color:#f4d35e; }}
     .gauge-fresh-age.fresh-stale {{ color:#e07a5f; }}
@@ -1657,6 +1658,7 @@ def render_html(snap: dict) -> None:
       .kpi-grid {{ grid-template-columns:1fr 1fr; }}
       .history-year {{ font-size:32px; }}
       .history-event {{ max-width:90%; font-size:12px; }}
+      .gauge-fresh {{ flex:1 1 calc(50% - 8px); }}
     }}
     @media (max-width:420px) {{
       .kpi-grid {{ grid-template-columns:1fr; }}
@@ -1675,22 +1677,16 @@ def render_html(snap: dict) -> None:
       <td align="center">
         <table role="presentation" width="980" cellspacing="0" cellpadding="0" style="max-width:980px;width:100%;table-layout:fixed;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #d5dde3;">
           <tr>
-            <td style="background:#1a3a4a;padding:28px 32px 24px 32px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td style="vertical-align:top;padding-right:16px;">
+            <td style="background:#1a3a4a;padding:22px 32px 18px 32px;">
                     <p style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8eb8c8;">Great Lakes · St. Lawrence system</p>
                     <h1 style="margin:0;font-family:Georgia,serif;font-size:28px;line-height:1.25;font-weight:normal;color:#ffffff;">Great Lakes Water Levels</h1>
                     <p style="margin:10px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#b7d0da;">Updated { _esc(snap['generated_edt']) } EDT · CHS IWLS gauges, refreshed about hourly</p>
-                  </td>
-                  <td style="vertical-align:middle;width:1%;">
                     <div class="data-fresh" title="How fresh each primary gauge reading is">
                       <p class="data-fresh-heading">Gauge freshness</p>
+                      <div class="data-fresh-row">
                       {''.join(fresh_html)}
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              </table>
             </td>
           </tr>
           <tr>
@@ -1986,11 +1982,13 @@ def main() -> None:
     print("Building Great Lakes briefing…")
     DATA.mkdir(parents=True, exist_ok=True)
     from_snap = "--from-snapshot" in sys.argv
+    skip_history = "--skip-history" in sys.argv
     if from_snap and SNAPSHOT.exists():
         print("Loading existing snapshot (skip live fetches)…")
         snap = json.loads(SNAPSHOT.read_text())
         if isinstance(snap.get("generated"), str):
             snap["generated"] = _parse_iso(snap["generated"]) or datetime.now(timezone.utc)
+        render_profile(snap)
     else:
         snap = build_snapshot()
         SNAPSHOT.write_text(json.dumps(_json_ready(snap), indent=2))
@@ -2000,14 +1998,17 @@ def main() -> None:
         render_map_winds(snap)
         render_map_conditions(snap)
         render_level_chart(snap)
-    existing_history = None
-    if HISTORY_JSON.exists():
-        try:
-            existing_history = json.loads(HISTORY_JSON.read_text())
-        except Exception:
-            existing_history = None
-    history = fetch_history(existing_history)
-    HISTORY_JSON.write_text(json.dumps(history, indent=2))
+    if skip_history:
+        print("Skipping history fetch")
+    else:
+        existing_history = None
+        if HISTORY_JSON.exists():
+            try:
+                existing_history = json.loads(HISTORY_JSON.read_text())
+            except Exception:
+                existing_history = None
+        history = fetch_history(existing_history)
+        HISTORY_JSON.write_text(json.dumps(history, indent=2))
     render_html(snap)
     print(f"Wrote {INDEX}")
     print("Done.")
