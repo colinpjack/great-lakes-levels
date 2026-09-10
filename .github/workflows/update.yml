@@ -40,8 +40,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html favicon.svg .nojekyll data/snapshot.json data/station_meta.json \
-            profile_overlay.png map_levels.png map_temps.png map_winds.png \
+          git add index.html favicon.svg .nojekyll history.js data/snapshot.json data/station_meta.json \
+            data/history_monthly.json profile_overlay.png map_levels.png map_temps.png map_winds.png \
             map_conditions.png chart_levels.png || true
           if git diff --staged --quiet; then
             echo "No content changes"

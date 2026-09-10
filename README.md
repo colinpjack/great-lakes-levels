@@ -16,6 +16,8 @@ GitHub Actions refreshes gauges about hourly, commits the generated page, and de
 | `map_winds.png` | Open-Meteo / NDBC winds |
 | `map_conditions.png` | SST vs last year + waves |
 | `chart_levels.png` | ~30-day IGLD 1985 vs LWD |
+| `history.js` | 30-second 1918–present player |
+| `data/history_monthly.json` | NOAA CO-OPS monthly means for the animation |
 | `update_site.py` | Fetches APIs and rebuilds the page |
 | `data/snapshot.json` | Latest assembled numbers |
 | `.github/workflows/update.yml` | Refresh, commit, deploy Pages |
@@ -30,10 +32,17 @@ python update_site.py
 open index.html
 ```
 
+Rebuild the page from a saved snapshot (skip live CHS fetches; still refreshes history if needed):
+
+```bash
+python update_site.py --from-snapshot
+```
+
 ## Data
 
 - **Water levels:** [Canadian Hydrographic Service IWLS API](https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service) (`wlo` observations, IGLD 1985 daily means, `wlf` forecasts). Use is subject to the [CHS licence](https://tides.gc.ca/en/licence-agreement).
 - **U.S. gauges / Michigan:** NOAA CO-OPS (IGLD).
+- **Century animation:** NOAA CO-OPS monthly means at long-record gauges (Duluth, Harbor Beach, St. Clair Shores / Algonac, Cleveland, Oswego), 12-month smoothed, 1918–present.
 - **Lake-average SST:** NOAA GLERL / CoastWatch GLSEA.
 - **Winds and waves:** Open-Meteo and NDBC.
 - **Profile graphic:** modified from Michigan Sea Grant (not to scale; printed elevations are chart datum).

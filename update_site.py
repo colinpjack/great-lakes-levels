@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import ssl
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -36,6 +37,8 @@ ASSETS = ROOT / "assets"
 PROFILE_SRC = ASSETS / "great-lakes-profile.jpg"
 INDEX = ROOT / "index.html"
 SNAPSHOT = DATA / "snapshot.json"
+HISTORY_JSON = DATA / "history_monthly.json"
+HISTORY_JS = ROOT / "history.js"
 PROFILE_PNG = ROOT / "profile_overlay.png"
 MAP_LEVELS = ROOT / "map_levels.png"
 MAP_TEMPS = ROOT / "map_temps.png"
@@ -105,6 +108,76 @@ PROFILE_ANCHORS = {
     "erie": (0.468, 0.37),
     "ontario": (0.575, 0.48),
 }
+
+# Water-basin clips for the century animation (fractions of the profile graphic).
+# y_lwd is the printed water surface (chart datum / Low Water Datum).
+PROFILE_BASINS = [
+    {
+        "key": "superior",
+        "y_lwd": 0.300,
+        "label": (0.11, 0.50),
+        "poly": [
+            (0.012, 0.42), (0.018, 0.300), (0.205, 0.300), (0.220, 0.34),
+            (0.210, 0.50), (0.175, 0.775), (0.115, 0.775), (0.055, 0.58),
+            (0.020, 0.48),
+        ],
+    },
+    {
+        "key": "michigan_huron",
+        "y_lwd": 0.334,
+        "label": (0.292, 0.48),
+        "poly": [
+            (0.232, 0.334), (0.358, 0.334), (0.355, 0.415), (0.328, 0.430),
+            (0.322, 0.690), (0.275, 0.690), (0.268, 0.430), (0.235, 0.400),
+        ],
+    },
+    {
+        "key": "st_clair",
+        "y_lwd": 0.338,
+        "label": (0.384, 0.28),
+        "poly": [
+            (0.368, 0.338), (0.398, 0.338), (0.396, 0.385), (0.370, 0.385),
+        ],
+    },
+    {
+        "key": "erie",
+        "y_lwd": 0.348,
+        "label": (0.452, 0.41),
+        "poly": [
+            (0.405, 0.348), (0.498, 0.348), (0.492, 0.490), (0.455, 0.475),
+            (0.408, 0.410),
+        ],
+    },
+    {
+        "key": "ontario",
+        "y_lwd": 0.418,
+        "label": (0.560, 0.54),
+        "poly": [
+            (0.508, 0.418), (0.618, 0.418), (0.608, 0.675), (0.545, 0.640),
+            (0.512, 0.500),
+        ],
+    },
+]
+
+# NOAA CO-OPS master / long-record gauges for the 1918–present animation.
+HISTORY_GAUGES = [
+    {"key": "superior", "label": "Superior", "ids": ["9099064"], "names": ["Duluth"], "lwd": 183.2, "color": "#3d7ea6"},
+    {"key": "michigan_huron", "label": "Michigan–Huron", "ids": ["9075014"], "names": ["Harbor Beach"], "lwd": 176.0, "color": "#2f6f7e"},
+    {"key": "st_clair", "label": "St. Clair", "ids": ["9034052", "9014070"], "names": ["St Clair Shores", "Algonac"], "lwd": 174.4, "color": "#5fa8bc"},
+    {"key": "erie", "label": "Erie", "ids": ["9063063"], "names": ["Cleveland"], "lwd": 173.5, "color": "#6aa8b8"},
+    {"key": "ontario", "label": "Ontario", "ids": ["9052030"], "names": ["Oswego"], "lwd": 74.2, "color": "#1a3a4a"},
+]
+
+HISTORY_NARRATIVE = [
+    (1926, "Dry 1920s: Superior and St. Clair sit near record lows"),
+    (1934, "Dust Bowl years: Erie falls toward its lowest monthly means"),
+    (1964, "Michigan–Huron’s crisis low — the benchmark drought year"),
+    (1973, "Ontario’s record-high period after a wet early 1970s"),
+    (1986, "Mid-1980s high water: Superior near its record high"),
+    (1997, "Another high-water peak on the middle lakes"),
+    (2013, "Michigan–Huron near the 1964 low after a long decline"),
+    (2020, "Record highs on Michigan–Huron, St. Clair, and Erie"),
+]
 
 # CHS IWLS stations (operating permanent gauges on the lakes and connecting rivers).
 CHS_STATIONS = [
@@ -279,6 +352,8 @@ def _parse_iso(raw: str | None) -> datetime | None:
 
 
 def fmt_edt(dt: datetime | None) -> str:
+    if isinstance(dt, str):
+        dt = _parse_iso(dt)
     if dt is None:
         return "unavailable"
     return dt.astimezone(TZ).strftime("%Y-%m-%d %H:%M")
@@ -666,6 +741,198 @@ def fetch_open_meteo() -> dict[str, dict]:
             print(f"  Open-Meteo marine {lake}: {e}")
         out[lake] = rec
     return out
+
+
+# ---------------------------------------------------------------------------
+# Century history (NOAA CO-OPS monthly means)
+# ---------------------------------------------------------------------------
+
+
+def _month_index(year: int, month: int, start_year: int = 1918) -> int:
+    return (year - start_year) * 12 + (month - 1)
+
+
+def _index_to_year_month(idx: int, start_year: int = 1918) -> tuple[int, int]:
+    return start_year + idx // 12, idx % 12 + 1
+
+
+def _fill_short_gaps(vals: list[float | None], max_gap: int = 18) -> list[float | None]:
+    out = list(vals)
+    n = len(out)
+    i = 0
+    while i < n:
+        if out[i] is not None:
+            i += 1
+            continue
+        j = i
+        while j < n and out[j] is None:
+            j += 1
+        gap = j - i
+        left = out[i - 1] if i > 0 else None
+        right = out[j] if j < n else None
+        if gap <= max_gap and left is not None and right is not None:
+            for k in range(i, j):
+                t = (k - i + 1) / (gap + 1)
+                out[k] = left + (right - left) * t
+        i = j
+    return out
+
+
+def _rolling_mean(vals: list[float | None], win: int = 12) -> list[float | None]:
+    out: list[float | None] = []
+    for i in range(len(vals)):
+        chunk = [v for v in vals[max(0, i - win + 1) : i + 1] if v is not None]
+        out.append(round(sum(chunk) / len(chunk), 3) if chunk else None)
+    return out
+
+
+def _annual_means(vals: list[float | None], start_year: int) -> tuple[list[int], list[float | None]]:
+    n_years = math.ceil(len(vals) / 12)
+    years, annual = [], []
+    for yi in range(n_years):
+        chunk = [v for v in vals[yi * 12 : yi * 12 + 12] if v is not None]
+        years.append(start_year + yi)
+        annual.append(round(sum(chunk) / len(chunk), 3) if len(chunk) >= 6 else None)
+    return years, annual
+
+
+def fetch_noaa_monthly(station_id: str, begin: date, end: date) -> dict[tuple[int, int], float]:
+    out: dict[tuple[int, int], float] = {}
+    year = begin.year
+    while date(year, 1, 1) <= end:
+        chunk_end_year = min(year + 9, end.year)
+        b = date(year, 1, 1) if year > begin.year else begin
+        e = date(chunk_end_year, 12, 31) if chunk_end_year < end.year else end
+        url = (
+            "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?"
+            + urllib.parse.urlencode(
+                {
+                    "product": "monthly_mean",
+                    "application": "great-lakes-levels",
+                    "station": station_id,
+                    "begin_date": b.strftime("%Y%m%d"),
+                    "end_date": e.strftime("%Y%m%d"),
+                    "datum": "IGLD",
+                    "units": "metric",
+                    "time_zone": "gmt",
+                    "format": "json",
+                }
+            )
+        )
+        try:
+            js = fetch_json(url, timeout=40)
+        except Exception as exc:
+            print(f"    NOAA monthly {station_id} {b.year}-{e.year}: {exc}")
+            year = chunk_end_year + 1
+            continue
+        if js.get("error"):
+            year = chunk_end_year + 1
+            continue
+        for row in js.get("data") or []:
+            try:
+                msl = row.get("MSL")
+                if msl in (None, ""):
+                    continue
+                out[(int(row["year"]), int(row["month"]))] = float(msl)
+            except (TypeError, ValueError, KeyError):
+                continue
+        year = chunk_end_year + 1
+        time.sleep(0.12)
+    return out
+
+
+def fetch_history(existing: dict | None = None) -> dict:
+    print("NOAA CO-OPS monthly means for century animation…")
+    start_year = 1918
+    today = datetime.now(timezone.utc).date()
+    end = today.replace(day=1) - timedelta(days=1)  # last complete month
+    if end.year < start_year:
+        end = today
+    n_months = _month_index(end.year, end.month, start_year) + 1
+
+    cached_lakes = ((existing or {}).get("lakes") or {}) if existing else {}
+    lakes_out: dict[str, dict] = {}
+
+    for spec in HISTORY_GAUGES:
+        key = spec["key"]
+        merged: dict[tuple[int, int], float] = {}
+        prior = cached_lakes.get(key) or {}
+        prior_monthly = prior.get("monthly") or []
+        prior_start = int((existing or {}).get("start_year") or start_year)
+        for i, val in enumerate(prior_monthly):
+            if val is None:
+                continue
+            y, m = _index_to_year_month(i, prior_start)
+            merged[(y, m)] = float(val)
+
+        last_cached = None
+        if merged:
+            last_cached = max(merged)
+        fetch_from = date(start_year, 1, 1)
+        if last_cached and last_cached[0] >= today.year - 2:
+            fetch_from = date(max(start_year, last_cached[0] - 1), 1, 1)
+            print(f"  {spec['label']}: refresh {fetch_from.year}–{end.year}")
+        else:
+            print(f"  {spec['label']}: backfill {start_year}–{end.year}")
+
+        for sid in spec["ids"]:
+            got = fetch_noaa_monthly(sid, fetch_from, end)
+            print(f"    station {sid}: {len(got)} months")
+            # Prefer the first station when both have a value.
+            for ym, val in got.items():
+                if sid == spec["ids"][0] or ym not in merged:
+                    merged[ym] = val
+
+        monthly: list[float | None] = []
+        for i in range(n_months):
+            y, m = _index_to_year_month(i, start_year)
+            monthly.append(merged.get((y, m)))
+        monthly = _fill_short_gaps(monthly)
+        smooth = _rolling_mean(monthly, 12)
+        years, annual = _annual_means(monthly, start_year)
+        present = [v for v in monthly if v is not None]
+        mean_v = round(sum(present) / len(present), 3) if present else None
+        lakes_out[key] = {
+            "label": spec["label"],
+            "lwd": spec["lwd"],
+            "color": spec["color"],
+            "stations": list(zip(spec["ids"], spec["names"])),
+            "mean": mean_v,
+            "monthly": [None if v is None else round(v, 3) for v in monthly],
+            "smooth": smooth,
+            "annual": annual,
+        }
+
+    years = list(range(start_year, start_year + math.ceil(n_months / 12)))
+    events = [{"year": y, "text": t} for y, t in HISTORY_NARRATIVE]
+    for spec in HISTORY_GAUGES:
+        lake = lakes_out[spec["key"]]
+        numbered = [(y, v) for y, v in zip(years, lake["annual"]) if v is not None]
+        if not numbered:
+            continue
+        ymin, vmin = min(numbered, key=lambda p: p[1])
+        ymax, vmax = max(numbered, key=lambda p: p[1])
+        events.append({"year": ymin, "text": f"{lake['label']} lowest annual mean in this series ({vmin:.2f} m IGLD)"})
+        events.append({"year": ymax, "text": f"{lake['label']} highest annual mean in this series ({vmax:.2f} m IGLD)"})
+    # Keep one caption per year so the 30-second play is readable.
+    by_year: dict[int, str] = {}
+    for spec_year, text in HISTORY_NARRATIVE:
+        by_year[spec_year] = text
+    for ev in events:
+        by_year.setdefault(ev["year"], ev["text"])
+    events = [{"year": y, "text": t} for y, t in sorted(by_year.items())]
+
+    return {
+        "source": "NOAA CO-OPS monthly mean sea level, IGLD 1985. Master / long-record gauges; a close stand-in for coordinated lake-wide averages.",
+        "start_year": start_year,
+        "end": f"{end.year}-{end.month:02d}",
+        "n_months": n_months,
+        "duration_s": 30,
+        "basins": PROFILE_BASINS,
+        "lakes": lakes_out,
+        "years": years,
+        "events": events,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1114,6 +1381,8 @@ def _esc(s: str) -> str:
 
 
 def _freshness_class(dt: datetime | None, now: datetime) -> str:
+    if isinstance(dt, str):
+        dt = _parse_iso(dt)
     if dt is None:
         return "fresh-unknown"
     age_h = (now - dt).total_seconds() / 3600
@@ -1125,6 +1394,8 @@ def _freshness_class(dt: datetime | None, now: datetime) -> str:
 
 
 def _age_label(dt: datetime | None, now: datetime) -> str:
+    if isinstance(dt, str):
+        dt = _parse_iso(dt)
     if dt is None:
         return "unknown"
     secs = max(0, int((now - dt).total_seconds()))
@@ -1166,8 +1437,20 @@ def _find(stations: list[dict], code: str) -> dict | None:
 
 def render_html(snap: dict) -> None:
     now = snap["generated"]
+    if isinstance(now, str):
+        now = _parse_iso(now) or datetime.now(timezone.utc)
+        snap["generated"] = now
     lakes = snap["lakes"]
     profile_src = f"profile_overlay.png?v={_asset_v(PROFILE_PNG)}"
+    history = {}
+    if HISTORY_JSON.exists():
+        try:
+            history = json.loads(HISTORY_JSON.read_text())
+        except Exception:
+            history = {}
+    history_json = json.dumps(history, separators=(",", ":"))
+    hist_v = _asset_v(HISTORY_JS) if HISTORY_JS.exists() else "0"
+    profile_raw = "assets/great-lakes-profile.jpg"
     map_l = f"map_levels.png?v={_asset_v(MAP_LEVELS)}"
     map_t = f"map_temps.png?v={_asset_v(MAP_TEMPS)}"
     map_w = f"map_winds.png?v={_asset_v(MAP_WINDS)}"
@@ -1233,13 +1516,18 @@ def render_html(snap: dict) -> None:
     primaries = [s for s in snap["stations"] if s.get("primary") and s.get("kind") == "lake"]
     fresh_html = []
     for s in primaries[:5]:
-        cls = _freshness_class(s.get("when"), now)
+        when = s.get("when") or now
+        if isinstance(when, datetime):
+            when_iso = when.isoformat()
+        else:
+            when_iso = str(when)
+        cls = _freshness_class(when, now)
         fresh_html.append(
             f"""
-                      <div class="gauge-fresh" data-as-of="{(s.get('when') or now).isoformat()}">
+                      <div class="gauge-fresh" data-as-of="{when_iso}">
                         <p class="gauge-fresh-name">{_esc(s['name'])}</p>
                         <p class="gauge-fresh-age {cls}">Checking…</p>
-                        <p class="gauge-fresh-when">{_esc(fmt_edt(s.get('when')))} EDT</p>
+                        <p class="gauge-fresh-when">{_esc(fmt_edt(when))} EDT</p>
                       </div>"""
         )
 
@@ -1350,8 +1638,25 @@ def render_html(snap: dict) -> None:
     .lightbox-close {{ position:fixed; top:16px; right:20px; border:0; background:rgba(255,255,255,0.12); color:#fff; font:600 14px/1 Arial,Helvetica,sans-serif; padding:10px 14px; border-radius:8px; cursor:pointer; }}
     .lightbox-hint {{ position:fixed; bottom:16px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.7); font:12px/1.4 Arial,Helvetica,sans-serif; }}
     .toc a {{ color:#2f6f7e; margin-right:14px; font-family:Arial,Helvetica,sans-serif; font-size:13px; }}
+    .history-stage {{ position:relative; background:#0b2230; border-radius:8px; overflow:hidden; border:1px solid #1a3a4a; max-width:100%; }}
+    .history-stage img {{ width:100%; max-width:100%; height:auto; display:block; }}
+    .history-stage canvas {{ position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; display:block; }}
+    .history-wrap {{ max-width:100%; overflow:hidden; }}
+    .history-hud {{ position:absolute; left:16px; top:10px; color:#fff; text-shadow:0 2px 10px rgba(0,0,0,0.55); z-index:2; pointer-events:none; }}
+    .history-year {{ margin:0; font-family:Georgia,serif; font-size:44px; line-height:1; font-weight:normal; }}
+    .history-month {{ margin:4px 0 0 0; font-family:Arial,Helvetica,sans-serif; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:#b7d0da; }}
+    .history-event {{ margin:10px 0 0 0; font-family:Arial,Helvetica,sans-serif; font-size:13px; max-width:62%; line-height:1.35; color:#e8f2f6; }}
+    .history-play-fab {{ position:absolute; right:16px; bottom:16px; z-index:3; border:0; background:#2f6f7e; color:#fff; font:700 14px/1 Arial,Helvetica,sans-serif; padding:12px 16px; border-radius:8px; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,0.25); }}
+    .history-play-fab:hover {{ background:#1a3a4a; }}
+    .history-controls {{ display:flex; align-items:center; gap:12px; padding:10px 0 6px 0; font-family:Arial,Helvetica,sans-serif; }}
+    .history-controls button {{ border:1px solid #2f6f7e; background:#2f6f7e; color:#fff; font:700 13px/1 Arial,Helvetica,sans-serif; padding:10px 14px; border-radius:8px; cursor:pointer; min-width:108px; }}
+    .history-controls input[type=range] {{ flex:1; accent-color:#2f6f7e; }}
+    .history-readout {{ font-size:13px; color:#1a3a4a; font-variant-numeric:tabular-nums; min-width:88px; text-align:right; }}
+    #history-chart {{ display:block; width:100% !important; max-width:100%; height:168px !important; border:1px solid #d5dde3; border-radius:6px; background:#f4f8f9; }}
     @media (max-width:720px) {{
       .kpi-grid {{ grid-template-columns:1fr 1fr; }}
+      .history-year {{ font-size:32px; }}
+      .history-event {{ max-width:90%; font-size:12px; }}
     }}
     @media (max-width:420px) {{
       .kpi-grid {{ grid-template-columns:1fr; }}
@@ -1368,7 +1673,7 @@ def render_html(snap: dict) -> None:
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f4;padding:24px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="980" cellspacing="0" cellpadding="0" style="max-width:980px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #d5dde3;">
+        <table role="presentation" width="980" cellspacing="0" cellpadding="0" style="max-width:980px;width:100%;table-layout:fixed;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #d5dde3;">
           <tr>
             <td style="background:#1a3a4a;padding:28px 32px 24px 32px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
@@ -1398,6 +1703,7 @@ def render_html(snap: dict) -> None:
               <p style="margin:0 0 12px 0;">Live briefing for the Great Lakes. Water levels are Canadian Hydrographic Service observations (IWLS), shown on IGLD 1985 and compared with Low Water Datum. Michigan and Huron share a surface. Tickers are 24-hour change unless noted. <span style="color:#5a7a86;">Click figures for full screen.</span></p>
               <p class="toc" style="margin:0;">
                 <a href="#profile">Profile</a>
+                <a href="#history">1918–now</a>
                 <a href="#levels">Levels map</a>
                 <a href="#temps">Temperature</a>
                 <a href="#winds">Winds</a>
@@ -1424,6 +1730,35 @@ def render_html(snap: dict) -> None:
           <tr>
             <td style="padding:0 24px 16px 24px;" align="center">
               <img src="{profile_src}" width="932" class="chart-thumb" alt="Great Lakes system profile with live water levels overlaid — click to enlarge" onclick="openChart('{profile_src}')" title="Click to view full screen">
+            </td>
+          </tr>
+          <tr>
+            <td id="history" style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">A century of lake levels</h2>
+              <p style="margin:0 0 12px 0;font-size:15px;">Play 1918 through last month in 30 seconds. Water surfaces on the schematic move with NOAA monthly means (12-month average so the seasonal cycle does not flicker). Vertical motion is exaggerated — real changes are about a metre. Tickers are year-over-year. Michigan and Huron share one surface.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 8px 24px;">
+              <div class="history-wrap">
+              <div class="history-stage" id="history-stage">
+                <img id="history-bg" src="{profile_raw}" width="932" alt="Great Lakes system profile used as the animation backdrop">
+                <canvas id="history-overlay" aria-hidden="true"></canvas>
+                <div class="history-hud">
+                  <p class="history-year" id="history-year">1918</p>
+                  <p class="history-month" id="history-month">Jan</p>
+                  <p class="history-event" id="history-event">Annual cycle removed — 12-month mean, IGLD 1985</p>
+                </div>
+                <button type="button" class="history-play-fab" id="history-play-fab">Play 30 seconds</button>
+              </div>
+              <div class="history-controls">
+                <button type="button" id="history-toggle">Play 30s</button>
+                <input type="range" id="history-scrub" min="0" max="1000" value="0" aria-label="Scrub lake-level history">
+                <span class="history-readout" id="history-readout">1918 Jan</span>
+              </div>
+              <canvas id="history-chart" width="932" height="168" aria-label="Hydrograph of centimetres versus each lake’s long-term mean"></canvas>
+              <div class="kpi-grid history-kpis" id="history-kpis"></div>
+              </div>
             </td>
           </tr>
           <tr>
@@ -1593,7 +1928,7 @@ def render_html(snap: dict) -> None:
           </tr>
           <tr>
             <td style="padding:20px 32px 28px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#5a7078;">
-              <p style="margin:0 0 8px 0;"><strong>Data:</strong> Water levels from the <a href="https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service" style="color:#2f6f7e;">Canadian Hydrographic Service IWLS API</a> (licence: <a href="https://tides.gc.ca/en/licence-agreement" style="color:#2f6f7e;">tides.gc.ca licence</a>). U.S. gauges: NOAA CO-OPS. SST: NOAA GLERL/CoastWatch GLSEA. Winds/waves: Open-Meteo and NDBC. Profile graphic modified from Michigan Sea Grant; not to scale.</p>
+              <p style="margin:0 0 8px 0;"><strong>Data:</strong> Water levels from the <a href="https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service" style="color:#2f6f7e;">Canadian Hydrographic Service IWLS API</a> (licence: <a href="https://tides.gc.ca/en/licence-agreement" style="color:#2f6f7e;">tides.gc.ca licence</a>). U.S. gauges and the century animation: NOAA CO-OPS monthly means (IGLD 1985). SST: NOAA GLERL/CoastWatch GLSEA. Winds/waves: Open-Meteo and NDBC. Profile graphic modified from Michigan Sea Grant; not to scale.</p>
               <p style="margin:0;">Provisional public data for awareness only — not for navigation or flood warning. In case of disparity, official CHS publications prevail. Quality flags follow UNESCO IOC standards on IWLS points.</p>
             </td>
           </tr>
@@ -1629,6 +1964,8 @@ def render_html(snap: dict) -> None:
     refreshFreshness();
     setInterval(refreshFreshness, 30000);
   </script>
+  <script type="application/json" id="gl-history">{history_json}</script>
+  <script src="history.js?v={hist_v}"></script>
 </body>
 </html>
 """
@@ -1647,15 +1984,30 @@ def _json_ready(obj):
 
 def main() -> None:
     print("Building Great Lakes briefing…")
-    snap = build_snapshot()
     DATA.mkdir(parents=True, exist_ok=True)
-    SNAPSHOT.write_text(json.dumps(_json_ready(snap), indent=2))
-    render_profile(snap)
-    render_map_levels(snap)
-    render_map_temps(snap)
-    render_map_winds(snap)
-    render_map_conditions(snap)
-    render_level_chart(snap)
+    from_snap = "--from-snapshot" in sys.argv
+    if from_snap and SNAPSHOT.exists():
+        print("Loading existing snapshot (skip live fetches)…")
+        snap = json.loads(SNAPSHOT.read_text())
+        if isinstance(snap.get("generated"), str):
+            snap["generated"] = _parse_iso(snap["generated"]) or datetime.now(timezone.utc)
+    else:
+        snap = build_snapshot()
+        SNAPSHOT.write_text(json.dumps(_json_ready(snap), indent=2))
+        render_profile(snap)
+        render_map_levels(snap)
+        render_map_temps(snap)
+        render_map_winds(snap)
+        render_map_conditions(snap)
+        render_level_chart(snap)
+    existing_history = None
+    if HISTORY_JSON.exists():
+        try:
+            existing_history = json.loads(HISTORY_JSON.read_text())
+        except Exception:
+            existing_history = None
+    history = fetch_history(existing_history)
+    HISTORY_JSON.write_text(json.dumps(history, indent=2))
     render_html(snap)
     print(f"Wrote {INDEX}")
     print("Done.")
