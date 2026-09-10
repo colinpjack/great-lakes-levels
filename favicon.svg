@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Great Lakes">
+  <rect width="32" height="32" rx="6" fill="#1a3a4a"/>
+  <path fill="#5fa8bc" d="M4 13c2-3 5-4 8-3 2 .6 3 2 5 2s4-2 6-1c2 .6 4 2 5 4-3 1-6 0-8 1-2 1-3 3-6 3s-6-2-8-2c-1 0-2 .3-2.6.6L4 13z"/>
+  <path fill="#2f6f7e" d="M5 19c2-1 4 0 7 0 3 0 4 2 7 2s6-2 8-1v3c-3 1-6 0-8 1-3 1-5-1-8-1-3 0-5 1-6 .4V19z"/>
+  <circle cx="10" cy="12" r="1.2" fill="#b7d0da"/>
+</svg>

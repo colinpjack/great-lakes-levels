@@ -1,0 +1,418 @@
+{
+  "10050": {
+    "offset_igld85": 183.2,
+    "status": "OK",
+    "lat": 48.409398,
+    "lon": -89.217299,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 183.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "10220": {
+    "offset_igld85": 183.2,
+    "status": "OK",
+    "lat": 48.833665,
+    "lon": -87.519593,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 183.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "10750": {
+    "offset_igld85": 183.2,
+    "status": "OK",
+    "lat": 47.961326,
+    "lon": -84.900844,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 183.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "10920": {
+    "offset_igld85": 183.2,
+    "status": "OK",
+    "lat": 46.529103,
+    "lon": -84.586295,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 183.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "10980": {
+    "offset_igld85": 183.0,
+    "status": "OK",
+    "lat": 46.512293,
+    "lon": -84.367217,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 183.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11010": {
+    "offset_igld85": 176.38,
+    "status": "OK",
+    "lat": 46.511248,
+    "lon": -84.34326,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.38,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11070": {
+    "offset_igld85": 176.0,
+    "status": "OK",
+    "lat": 46.254005,
+    "lon": -83.551069,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11195": {
+    "offset_igld85": 176.0,
+    "status": "OK",
+    "lat": 45.980533,
+    "lon": -81.924483,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11690": {
+    "offset_igld85": 176.0,
+    "status": "OK",
+    "lat": 45.256768,
+    "lon": -81.662811,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11860": {
+    "offset_igld85": 176.0,
+    "status": "OK",
+    "lat": 43.745354,
+    "lon": -81.727796,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11500": {
+    "offset_igld85": 176.0,
+    "status": "OK",
+    "lat": 44.508407,
+    "lon": -80.220098,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11375": {
+    "offset_igld85": 176.0,
+    "status": "OK",
+    "lat": 45.33855,
+    "lon": -80.035882,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11445": {
+    "offset_igld85": 176.0,
+    "status": "OK",
+    "lat": 44.752883,
+    "lon": -79.887967,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 176.0,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11940": {
+    "offset_igld85": 175.65,
+    "status": "OK",
+    "lat": 42.991306,
+    "lon": -82.421464,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 175.65,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11950": {
+    "offset_igld85": 174.65,
+    "status": "OK",
+    "lat": 42.657298,
+    "lon": -82.507029,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 174.65,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11965": {
+    "offset_igld85": 174.4,
+    "status": "OK",
+    "lat": 42.29616,
+    "lon": -82.710898,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 174.4,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "11995": {
+    "offset_igld85": 173.87,
+    "status": "OK",
+    "lat": 42.144437,
+    "lon": -83.114054,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 173.87,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "12005": {
+    "offset_igld85": 173.5,
+    "status": "OK",
+    "lat": 42.06173,
+    "lon": -83.114957,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 173.5,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "12065": {
+    "offset_igld85": 173.5,
+    "status": "OK",
+    "lat": 42.026942,
+    "lon": -82.734844,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 173.5,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "12250": {
+    "offset_igld85": 173.5,
+    "status": "OK",
+    "lat": 42.26016,
+    "lon": -81.914609,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 173.5,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "12400": {
+    "offset_igld85": 173.5,
+    "status": "OK",
+    "lat": 42.657883,
+    "lon": -81.213833,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 173.5,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "12710": {
+    "offset_igld85": 173.5,
+    "status": "OK",
+    "lat": 42.781308,
+    "lon": -80.201546,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 173.5,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "12865": {
+    "offset_igld85": 173.5,
+    "status": "OK",
+    "lat": 42.874377,
+    "lon": -79.252853,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 173.5,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "13030": {
+    "offset_igld85": 74.2,
+    "status": "OK",
+    "lat": 43.236713,
+    "lon": -79.219639,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 74.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "13150": {
+    "offset_igld85": 74.2,
+    "status": "OK",
+    "lat": 43.299437,
+    "lon": -79.793436,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 74.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "13320": {
+    "offset_igld85": 74.2,
+    "status": "OK",
+    "lat": 43.639771,
+    "lon": -79.380286,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 74.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "13590": {
+    "offset_igld85": 74.2,
+    "status": "OK",
+    "lat": 43.956475,
+    "lon": -78.164399,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 74.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "13988": {
+    "offset_igld85": 74.2,
+    "status": "OK",
+    "lat": 44.218183,
+    "lon": -76.517783,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 74.2,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "14400": {
+    "offset_igld85": 73.95,
+    "status": "OK",
+    "lat": 44.586928,
+    "lon": -75.681929,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 73.95,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "14600": {
+    "offset_igld85": 73.24,
+    "status": "OK",
+    "lat": 44.8223,
+    "lon": -75.320914,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 73.24,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "14602": {
+    "offset_igld85": 73.18,
+    "status": "OK",
+    "lat": 44.834556,
+    "lon": -75.308681,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 73.18,
+        "offsetPrecision": 2
+      }
+    ]
+  },
+  "14870": {
+    "offset_igld85": 46.4,
+    "status": "OK",
+    "lat": 45.01473,
+    "lon": -74.711514,
+    "datums": [
+      {
+        "code": "IGLD85",
+        "offset": 46.4,
+        "offsetPrecision": 2
+      }
+    ]
+  }
+}

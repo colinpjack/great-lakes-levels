@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="1800">
+  <title>Great Lakes Water Levels</title>
+  <meta name="description" content="Live Great Lakes water levels from the Canadian Hydrographic Service, with temperature, wind, and surface-condition maps. Updated hourly.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <style>
+    .kpi-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .kpi { background:#f4f8f9; border:1px solid #d7e4e8; border-radius:10px; padding:14px 12px; text-align:center; }
+    .kpi-label { margin:0 0 8px 0; font-family:Arial,Helvetica,sans-serif; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#5a7a86; }
+    .kpi-value { margin:0; font-family:Arial,Helvetica,sans-serif; font-size:24px; font-weight:700; color:#1a3a4a; line-height:1.1; }
+    .kpi-sub { margin:8px 0 0 0; font-family:Arial,Helvetica,sans-serif; font-size:11px; color:#6a7c84; line-height:1.35; }
+    .ticker { display:inline-block; margin-top:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; letter-spacing:0.02em; }
+    .ticker.up { color:#0b6e4f; }
+    .ticker.down { color:#c45c26; }
+    .ticker.flat { color:#5a7a86; font-size:14px; }
+    .data-fresh { font-family:Arial,Helvetica,sans-serif; text-align:right; min-width:168px; }
+    .data-fresh-heading { margin:0 0 8px 0; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#8eb8c8; }
+    .gauge-fresh { margin:0 0 8px 0; }
+    .gauge-fresh:last-child { margin-bottom:0; }
+    .gauge-fresh-name { margin:0; font-size:10px; letter-spacing:0.04em; text-transform:uppercase; color:#8eb8c8; }
+    .gauge-fresh-age { margin:2px 0 0 0; font-size:13px; font-weight:700; line-height:1.2; }
+    .gauge-fresh-age.fresh-ok { color:#7dcea0; }
+    .gauge-fresh-age.fresh-warn { color:#f4d35e; }
+    .gauge-fresh-age.fresh-stale { color:#e07a5f; }
+    .gauge-fresh-age.fresh-unknown { color:#b7d0da; }
+    .gauge-fresh-when { margin:2px 0 0 0; font-size:10px; color:#7a96a3; line-height:1.25; }
+    .data-table { width:100%; border-collapse:collapse; font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#243036; }
+    .data-table th { text-align:left; padding:8px 6px; border-bottom:2px solid #d5dde3; color:#5a7a86; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .data-table td { padding:7px 6px; border-bottom:1px solid #e4ebef; }
+    .data-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .data-table th.num { text-align:right; }
+    .data-table td.tag { color:#6a7c84; font-size:12px; }
+    .chart-thumb { cursor:zoom-in; max-width:100%; height:auto; border:1px solid #d5dde3; border-radius:6px; display:block; transition:opacity .15s ease; }
+    .chart-thumb:hover { opacity:0.92; }
+    .lightbox { display:none; position:fixed; inset:0; z-index:1000; background:rgba(10,20,28,0.92); align-items:center; justify-content:center; padding:24px; box-sizing:border-box; }
+    .lightbox.open { display:flex; }
+    .lightbox img { max-width:min(1400px,96vw); max-height:92vh; width:auto; height:auto; border-radius:6px; box-shadow:0 12px 40px rgba(0,0,0,0.45); background:#fff; }
+    .lightbox-close { position:fixed; top:16px; right:20px; border:0; background:rgba(255,255,255,0.12); color:#fff; font:600 14px/1 Arial,Helvetica,sans-serif; padding:10px 14px; border-radius:8px; cursor:pointer; }
+    .lightbox-hint { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.7); font:12px/1.4 Arial,Helvetica,sans-serif; }
+    .toc a { color:#2f6f7e; margin-right:14px; font-family:Arial,Helvetica,sans-serif; font-size:13px; }
+    @media (max-width:720px) {
+      .kpi-grid { grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width:420px) {
+      .kpi-grid { grid-template-columns:1fr; }
+      .kpi-value { font-size:22px; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#eef2f4;font-family:Georgia,'Times New Roman',serif;">
+  <div id="chart-lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Full screen figure" onclick="if(event.target===this)closeChart()">
+    <button type="button" class="lightbox-close" onclick="closeChart()" aria-label="Close">Close ✕</button>
+    <img id="lightbox-img" src="profile_overlay.png?v=44dadf86" alt="Full screen figure">
+    <div class="lightbox-hint">Click outside or press Esc to close</div>
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f4;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="980" cellspacing="0" cellpadding="0" style="max-width:980px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #d5dde3;">
+          <tr>
+            <td style="background:#1a3a4a;padding:28px 32px 24px 32px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="vertical-align:top;padding-right:16px;">
+                    <p style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8eb8c8;">Great Lakes · St. Lawrence system</p>
+                    <h1 style="margin:0;font-family:Georgia,serif;font-size:28px;line-height:1.25;font-weight:normal;color:#ffffff;">Great Lakes Water Levels</h1>
+                    <p style="margin:10px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#b7d0da;">Updated 2026-09-09 21:10 EDT · CHS IWLS gauges, refreshed about hourly</p>
+                  </td>
+                  <td style="vertical-align:middle;width:1%;">
+                    <div class="data-fresh" title="How fresh each primary gauge reading is">
+                      <p class="data-fresh-heading">Gauge freshness</p>
+                      
+                      <div class="gauge-fresh" data-as-of="2026-09-10T01:06:00+00:00">
+                        <p class="gauge-fresh-name">Thunder Bay</p>
+                        <p class="gauge-fresh-age fresh-ok">Checking…</p>
+                        <p class="gauge-fresh-when">2026-09-09 21:06 EDT</p>
+                      </div>
+                      <div class="gauge-fresh" data-as-of="2026-09-10T01:06:00+00:00">
+                        <p class="gauge-fresh-name">Tobermory</p>
+                        <p class="gauge-fresh-age fresh-ok">Checking…</p>
+                        <p class="gauge-fresh-when">2026-09-09 21:06 EDT</p>
+                      </div>
+                      <div class="gauge-fresh" data-as-of="2026-09-10T01:06:00+00:00">
+                        <p class="gauge-fresh-name">Belle River</p>
+                        <p class="gauge-fresh-age fresh-ok">Checking…</p>
+                        <p class="gauge-fresh-when">2026-09-09 21:06 EDT</p>
+                      </div>
+                      <div class="gauge-fresh" data-as-of="2026-09-10T01:06:00+00:00">
+                        <p class="gauge-fresh-name">Port Stanley</p>
+                        <p class="gauge-fresh-age fresh-ok">Checking…</p>
+                        <p class="gauge-fresh-when">2026-09-09 21:06 EDT</p>
+                      </div>
+                      <div class="gauge-fresh" data-as-of="2026-09-10T01:06:00+00:00">
+                        <p class="gauge-fresh-name">Toronto</p>
+                        <p class="gauge-fresh-age fresh-ok">Checking…</p>
+                        <p class="gauge-fresh-when">2026-09-09 21:06 EDT</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#2f6f7e;padding:14px 32px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#ffffff;">
+              <strong>Status:</strong> All mapped lakes are above Low Water Datum (chart datum) · Not for navigation · Official: <a href="https://tides.gc.ca/en" style="color:#ffffff;">tides.gc.ca</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:22px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;line-height:1.55;color:#243036;">
+              <p style="margin:0 0 12px 0;">Live briefing for the Great Lakes. Water levels are Canadian Hydrographic Service observations (IWLS), shown on IGLD 1985 and compared with Low Water Datum. Michigan and Huron share a surface. Tickers are 24-hour change unless noted. <span style="color:#5a7a86;">Click figures for full screen.</span></p>
+              <p class="toc" style="margin:0;">
+                <a href="#profile">Profile</a>
+                <a href="#levels">Levels map</a>
+                <a href="#temps">Temperature</a>
+                <a href="#winds">Winds</a>
+                <a href="#conditions">Conditions</a>
+                <a href="#channels">Channels</a>
+                <a href="#stations">Stations</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 32px 8px 32px;">
+              <p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:#5a7a86;">September 9 — lake levels <span style="letter-spacing:0;text-transform:none;color:#8a9aa2;">· vs last 24 hours</span></p>
+              <div class="kpi-grid">
+                
+                <div class="kpi">
+                  <p class="kpi-label">Lake Superior</p>
+                  <p class="kpi-value">183.46<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m</span></p>
+                  <div><span class="ticker up" title="Change vs previous period">▲ +2.9 cm</span></div>
+                  <p class="kpi-sub">+26 cm vs LWD<br>7d rising +2.0 cm<br>chart datum 183.2 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Lake Michigan</p>
+                  <p class="kpi-value">176.57<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m</span></p>
+                  <div><span class="ticker up" title="Change vs previous period">▲ +4.1 cm</span></div>
+                  <p class="kpi-sub">+57 cm vs LWD<br>7d steady (+0.1 cm)<br>Hydraulically one lake with Huron</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Lake Huron</p>
+                  <p class="kpi-value">176.59<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m</span></p>
+                  <div><span class="ticker up" title="Change vs previous period">▲ +4.1 cm</span></div>
+                  <p class="kpi-sub">+59 cm vs LWD<br>7d steady (+0.1 cm)<br>Hydraulically one lake with Michigan</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Lake St. Clair</p>
+                  <p class="kpi-value">175.33<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m</span></p>
+                  <div><span class="ticker down" title="Change vs previous period">▼ -1.4 cm</span></div>
+                  <p class="kpi-sub">+93 cm vs LWD<br>7d rising +2.3 cm<br>chart datum 174.4 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Lake Erie</p>
+                  <p class="kpi-value">174.40<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m</span></p>
+                  <div><span class="ticker up" title="Change vs previous period">▲ +2.3 cm</span></div>
+                  <p class="kpi-sub">+90 cm vs LWD<br>7d rising +1.7 cm<br>chart datum 173.5 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Lake Ontario</p>
+                  <p class="kpi-value">75.22<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m</span></p>
+                  <div><span class="ticker down" title="Change vs previous period">▼ -0.6 cm</span></div>
+                  <p class="kpi-sub">+102 cm vs LWD<br>7d falling -1.6 cm<br>chart datum 74.2 m</p>
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td id="profile" style="padding:20px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">System profile with live levels</h2>
+              <p style="margin:0 0 12px 0;font-size:15px;">Current IGLD 1985 elevation on each lake, centimetres above or below Low Water Datum, and 24-hour / 7-day trend. Schematic is not to scale. Surface elevations on the original drawing are chart-datum values.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 16px 24px;" align="center">
+              <img src="profile_overlay.png?v=44dadf86" width="932" class="chart-thumb" alt="Great Lakes system profile with live water levels overlaid — click to enlarge" onclick="openChart('profile_overlay.png?v=44dadf86')" title="Click to view full screen">
+            </td>
+          </tr>
+          <tr>
+            <td id="levels" style="padding:8px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Levels map</h2>
+              <p style="margin:0 0 12px 0;font-size:15px;">Lake fill is centimetres versus Low Water Datum. Dots are CHS gauges. Trend mark is 24-hour change.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 16px 24px;" align="center">
+              <img src="map_levels.png?v=fc073075" width="932" class="chart-thumb" alt="Great Lakes map coloured by water level versus Low Water Datum" onclick="openChart('map_levels.png?v=fc073075')">
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 32px 8px 32px;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;font-family:Georgia,serif;">30-day lake levels</h2>
+              <p style="margin:0 0 12px 0;font-size:15px;color:#243036;">CHS IGLD 1985 daily means, plotted as centimetres above or below Low Water Datum. End mark is the 7-day trend.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 16px 24px;" align="center">
+              <img src="chart_levels.png?v=28237f70" width="932" class="chart-thumb" alt="Thirty-day Great Lakes water levels versus Low Water Datum" onclick="openChart('chart_levels.png?v=28237f70')">
+            </td>
+          </tr>
+          <tr>
+            <td id="temps" style="padding:12px 32px 8px 32px;">
+              <p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:#5a7a86;">Lake-average surface temperature <span style="letter-spacing:0;text-transform:none;color:#8a9aa2;">· vs 7 days ago</span></p>
+              <div class="kpi-grid">
+                
+                <div class="kpi">
+                  <p class="kpi-label">Superior SST</p>
+                  <p class="kpi-value">17.9<span style="font-size:13px;font-weight:600;color:#5a7a86;"> °C</span></p>
+                  <div><span class="ticker up" title="Change vs previous period">▲ +0.9°</span></div>
+                  <p class="kpi-sub">7-day change<br>vs last year +3.8°</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Michigan SST</p>
+                  <p class="kpi-value">22.1<span style="font-size:13px;font-weight:600;color:#5a7a86;"> °C</span></p>
+                  <div><span class="ticker down" title="Change vs previous period">▼ -0.2°</span></div>
+                  <p class="kpi-sub">7-day change<br>vs last year +3.9°</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Huron SST</p>
+                  <p class="kpi-value">20.2<span style="font-size:13px;font-weight:600;color:#5a7a86;"> °C</span></p>
+                  <div><span class="ticker up" title="Change vs previous period">▲ +0.6°</span></div>
+                  <p class="kpi-sub">7-day change<br>vs last year +3.3°</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">St. Clair SST</p>
+                  <p class="kpi-value">23.1<span style="font-size:13px;font-weight:600;color:#5a7a86;"> °C</span></p>
+                  <div><span class="ticker down" title="Change vs previous period">▼ -0.4°</span></div>
+                  <p class="kpi-sub">7-day change<br>vs last year +3.7°</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Erie SST</p>
+                  <p class="kpi-value">23.5<span style="font-size:13px;font-weight:600;color:#5a7a86;"> °C</span></p>
+                  <div><span class="ticker down" title="Change vs previous period">▼ -0.3°</span></div>
+                  <p class="kpi-sub">7-day change<br>vs last year +2.8°</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Ontario SST</p>
+                  <p class="kpi-value">21.7<span style="font-size:13px;font-weight:600;color:#5a7a86;"> °C</span></p>
+                  <div><span class="ticker up" title="Change vs previous period">▲ +0.3°</span></div>
+                  <p class="kpi-sub">7-day change<br>vs last year +2.7°</p>
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Temperature map</h2>
+              <p style="margin:0 0 12px 0;font-size:15px;">Fill is NOAA CoastWatch GLSEA lake-average SST. Dots are NDBC buoy water temperatures. Trend is the 7-day GLSEA change; vs LY is the same day last year.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 16px 24px;" align="center">
+              <img src="map_temps.png?v=f0bcbd3b" width="932" class="chart-thumb" alt="Great Lakes surface temperature map" onclick="openChart('map_temps.png?v=f0bcbd3b')">
+            </td>
+          </tr>
+          <tr>
+            <td id="winds" style="padding:12px 32px 8px 32px;">
+              <p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:#5a7a86;">Winds and waves</p>
+              <div class="kpi-grid">
+                
+                <div class="kpi">
+                  <p class="kpi-label">Superior wind</p>
+                  <p class="kpi-value">9.0<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m/s</span></p>
+                  <div><span class="ticker flat" title="No prior reading">–</span></div>
+                  <p class="kpi-sub">from 284° · 10 m<br>waves 1.7 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Michigan wind</p>
+                  <p class="kpi-value">6.3<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m/s</span></p>
+                  <div><span class="ticker flat" title="No prior reading">–</span></div>
+                  <p class="kpi-sub">from 226° · 10 m<br>waves 0.7 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Huron wind</p>
+                  <p class="kpi-value">5.6<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m/s</span></p>
+                  <div><span class="ticker flat" title="No prior reading">–</span></div>
+                  <p class="kpi-sub">from 237° · 10 m<br>waves 1.0 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">St. Clair wind</p>
+                  <p class="kpi-value">8.8<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m/s</span></p>
+                  <div><span class="ticker flat" title="No prior reading">–</span></div>
+                  <p class="kpi-sub">from 250° · 10 m<br>waves 0.3 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Erie wind</p>
+                  <p class="kpi-value">10.0<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m/s</span></p>
+                  <div><span class="ticker flat" title="No prior reading">–</span></div>
+                  <p class="kpi-sub">from 253° · 10 m<br>waves 0.8 m</p>
+                </div>
+                <div class="kpi">
+                  <p class="kpi-label">Ontario wind</p>
+                  <p class="kpi-value">8.9<span style="font-size:13px;font-weight:600;color:#5a7a86;"> m/s</span></p>
+                  <div><span class="ticker flat" title="No prior reading">–</span></div>
+                  <p class="kpi-sub">from 226° · 10 m<br>waves 1.1 m</p>
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Wind map</h2>
+              <p style="margin:0 0 12px 0;font-size:15px;">Arrows point downwind. Lake-centre winds are Open-Meteo 10 m; orange arrows are NDBC buoys.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 16px 24px;" align="center">
+              <img src="map_winds.png?v=f89017bf" width="932" class="chart-thumb" alt="Great Lakes wind map" onclick="openChart('map_winds.png?v=f89017bf')">
+            </td>
+          </tr>
+          <tr>
+            <td id="conditions" style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Surface conditions</h2>
+              <p style="margin:0 0 12px 0;font-size:15px;">Lake fill is SST versus the same day last year (a simple thermal anomaly). Wave height is Open-Meteo marine / NDBC. For western Lake Erie cyanobacteria, see the <a href="https://coastalscience.noaa.gov/science-areas/habs/hab-forecasts/lake-erie/" style="color:#2f6f7e;">NOAA NCCOS HAB forecast</a>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 16px 24px;" align="center">
+              <img src="map_conditions.png?v=bd83d4a1" width="932" class="chart-thumb" alt="Great Lakes surface condition map" onclick="openChart('map_conditions.png?v=bd83d4a1')">
+            </td>
+          </tr>
+          <tr>
+            <td id="channels" style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Connecting channels</h2>
+              <p style="margin:0 0 12px 0;font-size:14px;color:#5a7078;font-family:Arial,Helvetica,sans-serif;">Drop is upstream minus downstream IGLD 1985 elevation. Tickers are the 24-hour change in that drop.</p>
+              <table class="data-table" role="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Reach</th>
+                    <th class="num" scope="col">Upstream (m)</th>
+                    <th class="num" scope="col">Downstream (m)</th>
+                    <th class="num" scope="col">Drop (m)</th>
+                    <th scope="col">24h</th>
+                  </tr>
+                </thead>
+                <tbody>
+                <tr><td>St. Marys (Sault Ste. Marie locks)</td><td class='num'>183.526</td><td class='num'>176.792</td><td class='num'>6.734</td><td><span class="ticker up" title="Change vs previous period">▲ +31.3 cm</span></td></tr>
+                <tr><td>Iroquois Dam (St. Lawrence)</td><td class='num'>74.266</td><td class='num'>73.807</td><td class='num'>0.459</td><td><span class="ticker up" title="Change vs previous period">▲ +2.0 cm</span></td></tr>
+                <tr><td>Niagara (Erie − Ontario lake means)</td>
+                    <td class="num">174.400</td>
+                    <td class="num">75.215</td>
+                    <td class="num">99.185</td>
+                    <td><span class="ticker up" title="Change vs previous period">▲ +3.0 cm</span></td></tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td id="stations" style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">CHS IWLS stations</h2>
+              <p style="margin:0 0 12px 0;font-size:14px;color:#5a7078;font-family:Arial,Helvetica,sans-serif;">Official water level (wlo) relative to chart datum, converted to IGLD 1985 with the station datum offset. Lake rows also show centimetres versus that lake’s Low Water Datum.</p>
+              <table class="data-table" role="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Station</th>
+                    <th scope="col">Code</th>
+                    <th scope="col">Water body</th>
+                    <th class="num" scope="col">CD (m)</th>
+                    <th class="num" scope="col">IGLD85 (m)</th>
+                    <th class="num" scope="col">vs LWD (cm)</th>
+                    <th scope="col">24h</th>
+                    <th scope="col">7d</th>
+                    <th scope="col">Age</th>
+                  </tr>
+                </thead>
+                <tbody>
+                <tr><td>Thunder Bay</td><td>10050</td><td>superior</td><td class='num'>0.276</td><td class='num'>183.476</td><td class='num'>+27.6</td><td><span class="ticker down" title="Change vs previous period">▼ -2.6 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -1.2 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Rossport</td><td>10220</td><td>superior</td><td class='num'>0.197</td><td class='num'>183.397</td><td class='num'>+19.7</td><td><span class="ticker up" title="Change vs previous period">▲ +1.9 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +3.1 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Michipicoten</td><td>10750</td><td>superior</td><td class='num'>0.256</td><td class='num'>183.456</td><td class='num'>+25.6</td><td><span class="ticker up" title="Change vs previous period">▲ +9.4 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +4.1 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Gros Cap</td><td>10920</td><td>st marys</td><td class='num'>0.376</td><td class='num'>183.576</td><td class='num'></td><td><span class="ticker up" title="Change vs previous period">▲ +8.8 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +1.9 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Sault Ste. Marie above locks</td><td>10980</td><td>st marys</td><td class='num'>0.526</td><td class='num'>183.526</td><td class='num'></td><td><span class="ticker up" title="Change vs previous period">▲ +18.8 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +3.2 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Sault Ste. Marie below locks</td><td>11010</td><td>st marys</td><td class='num'>0.412</td><td class='num'>176.792</td><td class='num'></td><td><span class="ticker down" title="Change vs previous period">▼ -12.5 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Thessalon</td><td>11070</td><td>huron</td><td class='num'>0.506</td><td class='num'>176.506</td><td class='num'>+50.6</td><td><span class="ticker up" title="Change vs previous period">▲ +1.7 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +1.5 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Little Current</td><td>11195</td><td>huron</td><td class='num'>0.642</td><td class='num'>176.642</td><td class='num'>+64.2</td><td><span class="ticker up" title="Change vs previous period">▲ +6.3 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +3.2 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Tobermory</td><td>11690</td><td>huron</td><td class='num'>0.561</td><td class='num'>176.561</td><td class='num'>+56.1</td><td><span class="ticker up" title="Change vs previous period">▲ +4.9 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Goderich</td><td>11860</td><td>huron</td><td class='num'>0.690</td><td class='num'>176.690</td><td class='num'>+69.0</td><td><span class="ticker flat" title="Little change">–</span></td><td><span class="ticker down" title="Change vs previous period">▼ -2.6 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Collingwood</td><td>11500</td><td>huron</td><td class='num'>0.626</td><td class='num'>176.626</td><td class='num'>+62.6</td><td><span class="ticker up" title="Change vs previous period">▲ +4.3 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Parry Sound</td><td>11375</td><td>huron</td><td class='num'>0.561</td><td class='num'>176.561</td><td class='num'>+56.1</td><td><span class="ticker up" title="Change vs previous period">▲ +6.9 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Midland</td><td>11445</td><td>huron</td><td class='num'>0.588</td><td class='num'>176.588</td><td class='num'>+58.8</td><td><span class="ticker up" title="Change vs previous period">▲ +4.7 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Point Edward</td><td>11940</td><td>st clair river</td><td class='num'>0.731</td><td class='num'>176.381</td><td class='num'></td><td><span class="ticker down" title="Change vs previous period">▼ -3.5 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -5.2 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Port Lambton</td><td>11950</td><td>st clair river</td><td class='num'>0.884</td><td class='num'>175.534</td><td class='num'></td><td><span class="ticker down" title="Change vs previous period">▼ -0.8 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +1.7 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Belle River</td><td>11965</td><td>st clair</td><td class='num'>0.925</td><td class='num'>175.325</td><td class='num'>+92.5</td><td><span class="ticker down" title="Change vs previous period">▼ -1.4 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +2.3 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Amherstburg</td><td>11995</td><td>detroit river</td><td class='num'>0.935</td><td class='num'>174.805</td><td class='num'></td><td><span class="ticker down" title="Change vs previous period">▼ -5.8 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +1.0 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Bar Point</td><td>12005</td><td>detroit river</td><td class='num'>0.896</td><td class='num'>174.396</td><td class='num'></td><td><span class="ticker down" title="Change vs previous period">▼ -7.6 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Kingsville</td><td>12065</td><td>erie</td><td class='num'>0.852</td><td class='num'>174.352</td><td class='num'>+85.2</td><td><span class="ticker down" title="Change vs previous period">▼ -5.4 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Erieau</td><td>12250</td><td>erie</td><td class='num'>0.840</td><td class='num'>174.340</td><td class='num'>+84.0</td><td><span class="ticker down" title="Change vs previous period">▼ -2.0 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Port Stanley</td><td>12400</td><td>erie</td><td class='num'>0.900</td><td class='num'>174.400</td><td class='num'>+90.0</td><td><span class="ticker up" title="Change vs previous period">▲ +5.8 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +1.1 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Port Dover</td><td>12710</td><td>erie</td><td class='num'>0.924</td><td class='num'>174.424</td><td class='num'>+92.4</td><td><span class="ticker up" title="Change vs previous period">▲ +5.0 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +3.5 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Port Colborne</td><td>12865</td><td>erie</td><td class='num'>1.003</td><td class='num'>174.503</td><td class='num'>+100.3</td><td><span class="ticker up" title="Change vs previous period">▲ +8.3 cm</span></td><td><span class="ticker up" title="Change vs previous period">▲ +3.0 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Port Weller</td><td>13030</td><td>ontario</td><td class='num'>1.017</td><td class='num'>75.217</td><td class='num'>+101.7</td><td><span class="ticker flat" title="Little change">–</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Burlington</td><td>13150</td><td>ontario</td><td class='num'>1.015</td><td class='num'>75.215</td><td class='num'>+101.5</td><td><span class="ticker down" title="Change vs previous period">▼ -1.3 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -2.4 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Toronto</td><td>13320</td><td>ontario</td><td class='num'>1.016</td><td class='num'>75.216</td><td class='num'>+101.6</td><td><span class="ticker down" title="Change vs previous period">▼ -4.9 cm</span></td><td><span class="ticker flat" title="Little change">–</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Cobourg</td><td>13590</td><td>ontario</td><td class='num'>0.968</td><td class='num'>75.168</td><td class='num'>+96.8</td><td><span class="ticker flat" title="Little change">–</span></td><td><span class="ticker down" title="Change vs previous period">▼ -3.7 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Kingston</td><td>13988</td><td>ontario</td><td class='num'>1.006</td><td class='num'>75.206</td><td class='num'>+100.6</td><td><span class="ticker up" title="Change vs previous period">▲ +2.9 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -1.6 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Brockville</td><td>14400</td><td>st lawrence</td><td class='num'>0.986</td><td class='num'>74.936</td><td class='num'></td><td><span class="ticker up" title="Change vs previous period">▲ +2.2 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -1.8 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Iroquois above</td><td>14600</td><td>st lawrence</td><td class='num'>1.026</td><td class='num'>74.266</td><td class='num'></td><td><span class="ticker up" title="Change vs previous period">▲ +6.6 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -2.0 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Iroquois below</td><td>14602</td><td>st lawrence</td><td class='num'>0.627</td><td class='num'>73.807</td><td class='num'></td><td><span class="ticker up" title="Change vs previous period">▲ +4.6 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -1.7 cm</span></td><td class='tag'>4 min ago</td></tr>
+                <tr><td>Cornwall</td><td>14870</td><td>st lawrence</td><td class='num'>0.508</td><td class='num'>46.908</td><td class='num'></td><td><span class="ticker up" title="Change vs previous period">▲ +2.2 cm</span></td><td><span class="ticker down" title="Change vs previous period">▼ -2.1 cm</span></td><td class='tag'>4 min ago</td></tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">NOAA CO-OPS stations (U.S. shore)</h2>
+              <p style="margin:0 0 12px 0;font-size:14px;color:#5a7078;font-family:Arial,Helvetica,sans-serif;">Complementary IGLD water levels, including Lake Michigan (no CHS open-lake gauge). 24h ticker from recent six-minute series.</p>
+              <table class="data-table" role="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Station</th>
+                    <th scope="col">ID</th>
+                    <th scope="col">Lake</th>
+                    <th class="num" scope="col">CD (m)</th>
+                    <th class="num" scope="col">IGLD85 (m)</th>
+                    <th class="num" scope="col">vs LWD (cm)</th>
+                    <th scope="col">24h</th>
+                    <th scope="col">7d</th>
+                    <th scope="col">Age</th>
+                  </tr>
+                </thead>
+                <tbody>
+                <tr><td>Duluth</td><td>9099064</td><td>superior</td><td class='num'></td><td class='num'>183.558</td><td class='num'>+35.8</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Milwaukee</td><td>9087057</td><td>michigan</td><td class='num'></td><td class='num'>176.525</td><td class='num'>+52.5</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Calumet Harbor</td><td>9087044</td><td>michigan</td><td class='num'></td><td class='num'>176.552</td><td class='num'>+55.2</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>16 min ago</td></tr>
+                <tr><td>Ludington</td><td>9087023</td><td>michigan</td><td class='num'></td><td class='num'>176.642</td><td class='num'>+64.2</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Mackinaw City</td><td>9075080</td><td>huron</td><td class='num'></td><td class='num'>176.530</td><td class='num'>+53.0</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Harbor Beach</td><td>9075014</td><td>huron</td><td class='num'></td><td class='num'>176.599</td><td class='num'>+59.9</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>St Clair Shores</td><td>9034052</td><td>st clair</td><td class='num'></td><td class='num'>175.320</td><td class='num'>+92.0</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Cleveland</td><td>9063063</td><td>erie</td><td class='num'></td><td class='num'>174.371</td><td class='num'>+87.1</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Fairport</td><td>9063053</td><td>erie</td><td class='num'></td><td class='num'>174.370</td><td class='num'>+87.0</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Rochester</td><td>9052058</td><td>ontario</td><td class='num'></td><td class='num'>75.180</td><td class='num'>+98.0</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                <tr><td>Oswego</td><td>9052030</td><td>ontario</td><td class='num'></td><td class='num'>75.189</td><td class='num'>+98.9</td><td><span class="ticker flat" title="No prior reading">–</span></td><td><span class="ticker flat" title="No prior reading">–</span></td><td class='tag'>10 min ago</td></tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
+              <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">NDBC buoys</h2>
+              <table class="data-table" role="table">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Lake</th>
+                    <th class="num" scope="col">Water °C</th>
+                    <th class="num" scope="col">Wind m/s</th>
+                    <th class="num" scope="col">Waves m</th>
+                    <th scope="col">Age</th>
+                  </tr>
+                </thead>
+                <tbody>
+                <tr><td>45001</td><td>superior</td><td class='num'>16.9</td><td class='num'>8.0</td><td class='num'></td><td class='tag'>1 h ago</td></tr><tr><td>45002</td><td>michigan</td><td class='num'>23.4</td><td class='num'>7.0</td><td class='num'></td><td class='tag'>1 h ago</td></tr><tr><td>45004</td><td>superior</td><td class='num'>16.6</td><td class='num'>12.0</td><td class='num'></td><td class='tag'>1 h ago</td></tr><tr><td>45005</td><td>erie</td><td class='num'>24.4</td><td class='num'>5.0</td><td class='num'></td><td class='tag'>1 h ago</td></tr><tr><td>45006</td><td>superior</td><td class='num'>17.7</td><td class='num'>8.0</td><td class='num'></td><td class='tag'>1 h ago</td></tr><tr><td>45012</td><td>ontario</td><td class='num'>22.6</td><td class='num'>9.0</td><td class='num'></td><td class='tag'>1 h ago</td></tr><tr><td>45013</td><td>michigan</td><td class='num'>25.5</td><td class='num'>4.0</td><td class='num'>0.3</td><td class='tag'>2 h ago</td></tr><tr><td>45022</td><td>michigan</td><td class='num'>23.3</td><td class='num'>10.0</td><td class='num'>0.3</td><td class='tag'>1 h ago</td></tr><tr><td>45023</td><td>superior</td><td class='num'>19.4</td><td class='num'>10.0</td><td class='num'>1.5</td><td class='tag'>2 h ago</td></tr><tr><td>45025</td><td>superior</td><td class='num'>17.4</td><td class='num'>7.0</td><td class='num'>0.3</td><td class='tag'>1 h ago</td></tr><tr><td>45026</td><td>michigan</td><td class='num'>22.7</td><td class='num'>3.0</td><td class='num'>0.4</td><td class='tag'>30 min ago</td></tr><tr><td>45029</td><td>michigan</td><td class='num'>22.8</td><td class='num'>6.0</td><td class='num'>0.9</td><td class='tag'>20 min ago</td></tr><tr><td>45132</td><td>erie</td><td class='num'>23.8</td><td class='num'>8.0</td><td class='num'>0.8</td><td class='tag'>1 h ago</td></tr><tr><td>45135</td><td>ontario</td><td class='num'>22.7</td><td class='num'>7.0</td><td class='num'>0.7</td><td class='tag'>1 h ago</td></tr><tr><td>45136</td><td>superior</td><td class='num'>16.3</td><td class='num'>8.0</td><td class='num'>1.9</td><td class='tag'>1 h ago</td></tr><tr><td>45137</td><td>huron</td><td class='num'>20.4</td><td class='num'>8.0</td><td class='num'>1.0</td><td class='tag'>1 h ago</td></tr><tr><td>45139</td><td>ontario</td><td class='num'>23.2</td><td class='num'>7.0</td><td class='num'>0.3</td><td class='tag'>1 h ago</td></tr><tr><td>45142</td><td>erie</td><td class='num'>23.5</td><td class='num'>9.0</td><td class='num'>0.9</td><td class='tag'>1 h ago</td></tr><tr><td>45143</td><td>huron</td><td class='num'>21.7</td><td class='num'>9.0</td><td class='num'>0.8</td><td class='tag'>1 h ago</td></tr><tr><td>45147</td><td>st_clair</td><td class='num'>23.8</td><td class='num'>5.0</td><td class='num'>0.3</td><td class='tag'>1 h ago</td></tr><tr><td>45149</td><td>huron</td><td class='num'></td><td class='num'>5.0</td><td class='num'>0.5</td><td class='tag'>1 h ago</td></tr><tr><td>45151</td><td>huron</td><td class='num'>21.8</td><td class='num'>3.0</td><td class='num'>0.2</td><td class='tag'>1 h ago</td></tr><tr><td>45152</td><td>huron</td><td class='num'>21.2</td><td class='num'>8.0</td><td class='num'>0.4</td><td class='tag'>2 h ago</td></tr><tr><td>45154</td><td>huron</td><td class='num'>20.6</td><td class='num'>10.0</td><td class='num'>1.0</td><td class='tag'>1 h ago</td></tr><tr><td>45159</td><td>ontario</td><td class='num'>22.4</td><td class='num'>7.0</td><td class='num'>0.8</td><td class='tag'>1 h ago</td></tr><tr><td>45161</td><td>michigan</td><td class='num'>22.9</td><td class='num'>6.0</td><td class='num'></td><td class='tag'>30 min ago</td></tr><tr><td>45162</td><td>huron</td><td class='num'>22.4</td><td class='num'>5.0</td><td class='num'>0.3</td><td class='tag'>50 min ago</td></tr><tr><td>45164</td><td>erie</td><td class='num'>24.1</td><td class='num'></td><td class='num'>0.4</td><td class='tag'>1 h ago</td></tr><tr><td>45165</td><td>erie</td><td class='num'>24.9</td><td class='num'>6.0</td><td class='num'>0.3</td><td class='tag'>10 min ago</td></tr><tr><td>45167</td><td>erie</td><td class='num'>23.5</td><td class='num'>5.0</td><td class='num'>0.5</td><td class='tag'>2 h ago</td></tr><tr><td>45168</td><td>michigan</td><td class='num'>22.3</td><td class='num'>5.0</td><td class='num'>0.6</td><td class='tag'>20 min ago</td></tr><tr><td>45170</td><td>michigan</td><td class='num'>22.7</td><td class='num'>4.0</td><td class='num'>0.3</td><td class='tag'>30 min ago</td></tr><tr><td>45174</td><td>michigan</td><td class='num'>22.4</td><td class='num'>2.0</td><td class='num'>0.1</td><td class='tag'>30 min ago</td></tr><tr><td>45175</td><td>huron</td><td class='num'>22.1</td><td class='num'>6.0</td><td class='num'>0.5</td><td class='tag'>1 h ago</td></tr><tr><td>45176</td><td>erie</td><td class='num'>24.5</td><td class='num'>4.0</td><td class='num'>0.3</td><td class='tag'>20 min ago</td></tr><tr><td>45186</td><td>michigan</td><td class='num'>18.2</td><td class='num'>3.0</td><td class='num'>0.0</td><td class='tag'>20 min ago</td></tr><tr><td>45187</td><td>michigan</td><td class='num'>20.7</td><td class='num'>2.0</td><td class='num'>0.1</td><td class='tag'>20 min ago</td></tr><tr><td>45190</td><td>ontario</td><td class='num'>22.5</td><td class='num'>7.0</td><td class='num'></td><td class='tag'>2 h ago</td></tr><tr><td>45191</td><td>ontario</td><td class='num'>22.5</td><td class='num'>7.0</td><td class='num'></td><td class='tag'>1 h ago</td></tr><tr><td>45194</td><td>huron</td><td class='num'>21.4</td><td class='num'></td><td class='num'>0.6</td><td class='tag'>40 min ago</td></tr><tr><td>45196</td><td>erie</td><td class='num'></td><td class='num'>3.0</td><td class='num'>0.3</td><td class='tag'>1 h ago</td></tr><tr><td>45197</td><td>erie</td><td class='num'>24.5</td><td class='num'>4.0</td><td class='num'>0.5</td><td class='tag'>1 h ago</td></tr><tr><td>45198</td><td>michigan</td><td class='num'>24.8</td><td class='num'>4.0</td><td class='num'>0.2</td><td class='tag'>20 min ago</td></tr><tr><td>45199</td><td>michigan</td><td class='num'>22.0</td><td class='num'>5.0</td><td class='num'>0.3</td><td class='tag'>2 h ago</td></tr><tr><td>45200</td><td>erie</td><td class='num'>25.2</td><td class='num'>6.0</td><td class='num'>0.2</td><td class='tag'>30 min ago</td></tr><tr><td>45201</td><td>erie</td><td class='num'>24.9</td><td class='num'>5.0</td><td class='num'>0.3</td><td class='tag'>20 min ago</td></tr><tr><td>45202</td><td>erie</td><td class='num'>25.9</td><td class='num'>4.0</td><td class='num'>0.2</td><td class='tag'>20 min ago</td></tr><tr><td>45203</td><td>erie</td><td class='num'></td><td class='num'>2.0</td><td class='num'>0.2</td><td class='tag'>20 min ago</td></tr><tr><td>45204</td><td>erie</td><td class='num'>24.3</td><td class='num'>3.0</td><td class='num'>0.3</td><td class='tag'>30 min ago</td></tr><tr><td>45205</td><td>erie</td><td class='num'>24.7</td><td class='num'>2.0</td><td class='num'>0.3</td><td class='tag'>20 min ago</td></tr><tr><td>45206</td><td>erie</td><td class='num'>24.7</td><td class='num'>4.0</td><td class='num'>0.4</td><td class='tag'>20 min ago</td></tr><tr><td>45207</td><td>erie</td><td class='num'>23.8</td><td class='num'>4.0</td><td class='num'>0.5</td><td class='tag'>30 min ago</td></tr><tr><td>45208</td><td>erie</td><td class='num'>24.0</td><td class='num'>7.0</td><td class='num'>0.6</td><td class='tag'>30 min ago</td></tr><tr><td>45209</td><td>huron</td><td class='num'>23.0</td><td class='num'>5.0</td><td class='num'>0.3</td><td class='tag'>20 min ago</td></tr><tr><td>45210</td><td>michigan</td><td class='num'></td><td class='num'></td><td class='num'>0.5</td><td class='tag'>44 min ago</td></tr><tr><td>45211</td><td>superior</td><td class='num'></td><td class='num'></td><td class='num'>1.9</td><td class='tag'>44 min ago</td></tr><tr><td>45212</td><td>huron</td><td class='num'></td><td class='num'></td><td class='num'>0.8</td><td class='tag'>50 min ago</td></tr><tr><td>45213</td><td>superior</td><td class='num'></td><td class='num'></td><td class='num'>2.6</td><td class='tag'>1 h ago</td></tr><tr><td>45214</td><td>michigan</td><td class='num'></td><td class='num'></td><td class='num'>0.7</td><td class='tag'>1 h ago</td></tr><tr><td>45215</td><td>ontario</td><td class='num'>22.3</td><td class='num'></td><td class='num'>0.5</td><td class='tag'>44 min ago</td></tr><tr><td>45216</td><td>superior</td><td class='num'>17.8</td><td class='num'>7.0</td><td class='num'>0.6</td><td class='tag'>1 h ago</td></tr><tr><td>45220</td><td>erie</td><td class='num'>23.4</td><td class='num'>9.0</td><td class='num'>0.7</td><td class='tag'>1 h ago</td></tr><tr><td>45222</td><td>erie</td><td class='num'></td><td class='num'></td><td class='num'></td><td class='tag'>2 h ago</td></tr><tr><td>45223</td><td>erie</td><td class='num'></td><td class='num'></td><td class='num'></td><td class='tag'>2 h ago</td></tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px 28px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#5a7078;">
+              <p style="margin:0 0 8px 0;"><strong>Data:</strong> Water levels from the <a href="https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service" style="color:#2f6f7e;">Canadian Hydrographic Service IWLS API</a> (licence: <a href="https://tides.gc.ca/en/licence-agreement" style="color:#2f6f7e;">tides.gc.ca licence</a>). U.S. gauges: NOAA CO-OPS. SST: NOAA GLERL/CoastWatch GLSEA. Winds/waves: Open-Meteo and NDBC. Profile graphic modified from Michigan Sea Grant; not to scale.</p>
+              <p style="margin:0;">Provisional public data for awareness only — not for navigation or flood warning. In case of disparity, official CHS publications prevail. Quality flags follow UNESCO IOC standards on IWLS points.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+  <script>
+    function openChart(src) {
+      var box = document.getElementById('chart-lightbox');
+      document.getElementById('lightbox-img').src = src;
+      box.classList.add('open');
+    }
+    function closeChart() {
+      document.getElementById('chart-lightbox').classList.remove('open');
+    }
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeChart(); });
+    function refreshFreshness() {
+      var now = Date.now();
+      document.querySelectorAll('.gauge-fresh').forEach(function(el) {
+        var iso = el.getAttribute('data-as-of');
+        var ageEl = el.querySelector('.gauge-fresh-age');
+        if (!iso || !ageEl) return;
+        var t = Date.parse(iso);
+        if (isNaN(t)) { ageEl.textContent = 'unknown'; ageEl.className = 'gauge-fresh-age fresh-unknown'; return; }
+        var h = (now - t) / 3600000;
+        var mins = Math.round((now - t) / 60000);
+        var label = mins < 2 ? 'just now' : (mins < 60 ? mins + ' min ago' : (mins < 1440 ? Math.round(mins/60) + ' h ago' : Math.round(mins/1440) + ' d ago'));
+        ageEl.textContent = label;
+        ageEl.className = 'gauge-fresh-age ' + (h <= 3 ? 'fresh-ok' : (h <= 12 ? 'fresh-warn' : 'fresh-stale'));
+      });
+    }
+    refreshFreshness();
+    setInterval(refreshFreshness, 30000);
+  </script>
+</body>
+</html>

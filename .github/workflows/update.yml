@@ -1,0 +1,63 @@
+name: Update Great Lakes briefing
+
+on:
+  schedule:
+    # GitHub delays or drops jobs queued at minute 0 (highest load on shared runners).
+    # Two off-hour slots give a dropped tick another chance in the same hour.
+    - cron: "23 * * * *"
+    - cron: "53 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh gauges, maps, and index.html
+        run: python -u update_site.py
+
+      - name: Commit updated site (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html favicon.svg .nojekyll data/snapshot.json data/station_meta.json \
+            profile_overlay.png map_levels.png map_temps.png map_winds.png \
+            map_conditions.png chart_levels.png || true
+          if git diff --staged --quiet; then
+            echo "No content changes"
+          else
+            git commit -m "chore: refresh Great Lakes briefing $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

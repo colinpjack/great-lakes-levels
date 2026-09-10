@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.mplconfig/
+.DS_Store
+*.log
+.env
+data/*.json.bak
+_site/
