@@ -27,8 +27,11 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.patheffects as pe  # noqa: E402
 import numpy as np  # noqa: E402
-from matplotlib.patches import Polygon  # noqa: E402
+from matplotlib.colors import Normalize  # noqa: E402
+from matplotlib.patches import FancyArrow, PathPatch, Rectangle  # noqa: E402
+from matplotlib.path import Path as MplPath  # noqa: E402
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
@@ -45,6 +48,7 @@ MAP_TEMPS = ROOT / "map_temps.png"
 MAP_WINDS = ROOT / "map_winds.png"
 MAP_COND = ROOT / "map_conditions.png"
 CHART_PNG = ROOT / "chart_levels.png"
+ATLAS_JSON = DATA / "atlas_basemap.json"
 
 IWLS = "https://api-iwls.dfo-mpo.gc.ca"
 UA = "great-lakes-levels/1.0 (+https://github.com/colinpjack/great-lakes-levels)"
@@ -239,6 +243,31 @@ LAKE_POINTS = {
     "ontario": (43.6, -77.9),
 }
 
+# Label anchors (lat, lon) sit in open water of each basin on the Albers plate.
+LAKE_LABELS = {
+    "superior": (47.55, -87.55),
+    "michigan": (44.05, -87.00),
+    "huron": (44.72, -82.18),
+    "st_clair": (42.88, -84.05),
+    "erie": (42.12, -80.95),
+    "ontario": (43.60, -77.70),
+}
+
+# lat, lon of the lake body when the printed label sits on land.
+LAKE_LEADERS = {
+    "st_clair": (42.47, -82.67),
+}
+
+ATLAS_CITIES = (
+    ("Thunder Bay", 48.38, -89.25, 6, 5),
+    ("Duluth", 46.79, -92.10, 5, -8),
+    ("Chicago", 41.85, -87.65, 8, -10),
+    ("Milwaukee", 43.04, -87.91, -20, 2),
+    ("Cleveland", 41.50, -81.69, 6, -11),
+    ("Buffalo", 42.89, -78.88, 8, 5),
+    ("Toronto", 43.70, -79.38, 5, 11),
+)
+
 # Simplified shorelines for schematic maps (lon, lat).
 LAKE_POLYS = {
     "superior": [
@@ -380,6 +409,30 @@ def trend_word(delta: float | None, *, flat: float, unit: str) -> str:
         return f"steady ({delta:+.1f}{unit})"
     direction = "rising" if delta > 0 else "falling"
     return f"{direction} {delta:+.1f}{unit}"
+
+
+def sparkline_svg(vals: list[float], *, width: int = 84, height: int = 22, rising: bool | None = None) -> str:
+    if len(vals) < 2:
+        return ""
+    vmin, vmax = min(vals), max(vals)
+    span = vmax - vmin or 1.0
+    pts = []
+    n = len(vals)
+    for i, v in enumerate(vals):
+        x = i / (n - 1) * (width - 2) + 1
+        y = height - 2 - (v - vmin) / span * (height - 4)
+        pts.append(f"{x:.1f},{y:.1f}")
+    if rising is True:
+        color = "#7dcea0"
+    elif rising is False:
+        color = "#e07a5f"
+    else:
+        color = "#8eb8c8"
+    return (
+        f'<svg class="hero-spark" width="100%" height="{height}" viewBox="0 0 {width} {height}" '
+        f'preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="{color}" stroke-width="1.6" '
+        f'stroke-linecap="round" stroke-linejoin="round" points="{" ".join(pts)}"/></svg>'
+    )
 
 
 def load_font(size: int, *, bold: bool = False) -> ImageFont.ImageFont:
@@ -1151,24 +1204,285 @@ def render_profile(snap: dict) -> None:
     im.convert("RGB").save(PROFILE_PNG, "PNG", optimize=True)
 
 
-def _style_map(ax, title: str) -> None:
-    ax.set_xlim(-92.6, -75.8)
-    ax.set_ylim(41.2, 49.2)
-    ax.set_aspect("equal")
-    ax.set_facecolor("#eef2f4")
-    ax.set_title(title, fontsize=12, color="#1a3a4a", pad=8, fontweight="bold")
-    ax.set_xlabel("Longitude", fontsize=8, color="#5a7a86")
-    ax.set_ylabel("Latitude", fontsize=8, color="#5a7a86")
-    ax.tick_params(labelsize=7, colors="#5a7a86")
-    for spine in ax.spines.values():
-        spine.set_color("#d5dde3")
+ATLAS_PAPER = "#f3efe4"
+ATLAS_LAND = "#e7dcc6"
+ATLAS_LAND_EDGE = "#b9a88c"
+ATLAS_WATER = "#c3d6e2"
+ATLAS_WATER_EDGE = "#2c4a58"
+ATLAS_INK = "#1a3a4a"
+_ATLAS_CACHE: dict | None = None
+_HALO = [pe.withStroke(linewidth=3.0, foreground="#f7f3ea")]
 
 
-def _draw_lakes(ax, facecolor="#c5dce4", edge="#2f6f7e") -> None:
-    for key, poly in LAKE_POLYS.items():
-        ax.add_patch(
-            Polygon([(x, y) for x, y in poly], closed=True, facecolor=facecolor, edgecolor=edge, linewidth=0.8, zorder=1)
+class Albers:
+    """Albers equal-area conic centred on the Great Lakes (metres)."""
+
+    def __init__(self, lon0: float = -84.0, lat0: float = 45.0, lat1: float = 42.0, lat2: float = 49.0, R: float = 6378137.0):
+        self.lon0 = math.radians(lon0)
+        self.n = 0.5 * (math.sin(math.radians(lat1)) + math.sin(math.radians(lat2)))
+        self.C = math.cos(math.radians(lat1)) ** 2 + 2 * self.n * math.sin(math.radians(lat1))
+        self.R = R
+        self.rho0 = self._rho(math.radians(lat0))
+
+    def _rho(self, lat_rad):
+        return (self.R / self.n) * np.sqrt(self.C - 2 * self.n * np.sin(lat_rad))
+
+    def xy(self, lon: float, lat: float) -> tuple[float, float]:
+        x, y = self.vec([lon], [lat])
+        return float(x[0]), float(y[0])
+
+    def vec(self, lons, lats) -> tuple[np.ndarray, np.ndarray]:
+        lons = np.radians(np.asarray(lons, dtype=float))
+        lats = np.radians(np.asarray(lats, dtype=float))
+        theta = self.n * (lons - self.lon0)
+        rho = self._rho(lats)
+        return rho * np.sin(theta), self.rho0 - rho * np.cos(theta)
+
+
+def _load_atlas() -> dict | None:
+    global _ATLAS_CACHE
+    if _ATLAS_CACHE is not None:
+        return _ATLAS_CACHE
+    if not ATLAS_JSON.exists():
+        return None
+    _ATLAS_CACHE = json.loads(ATLAS_JSON.read_text())
+    return _ATLAS_CACHE
+
+
+def _polys_to_path(proj: Albers, polys: list) -> MplPath | None:
+    chunks: list[np.ndarray] = []
+    codes: list = []
+    for rings in polys or []:
+        for ring in rings:
+            if not ring or len(ring) < 3:
+                continue
+            xs, ys = proj.vec([p[0] for p in ring], [p[1] for p in ring])
+            n = len(xs)
+            chunks.append(np.column_stack([xs, ys]))
+            codes.append(MplPath.MOVETO)
+            if n > 2:
+                codes.extend([MplPath.LINETO] * (n - 2))
+            codes.append(MplPath.CLOSEPOLY)
+    if not chunks:
+        return None
+    return MplPath(np.vstack(chunks), codes)
+
+
+def _add_polys(ax, proj: Albers, polys: list, facecolor, edgecolor, lw: float, zorder: float, islands: bool = True) -> None:
+    path = _polys_to_path(proj, polys)
+    if path is None:
+        return
+    ax.add_patch(
+        PathPatch(
+            path,
+            facecolor=facecolor,
+            edgecolor=edgecolor,
+            lw=lw,
+            zorder=zorder,
+            joinstyle="round",
+            capstyle="round",
         )
+    )
+    if not islands:
+        return
+    for rings in polys or []:
+        for hole in rings[1:]:
+            hp = _polys_to_path(proj, [[hole]])
+            if hp is None:
+                continue
+            ax.add_patch(
+                PathPatch(
+                    hp,
+                    facecolor=ATLAS_LAND,
+                    edgecolor=edgecolor,
+                    lw=max(0.25, lw * 0.55),
+                    zorder=zorder + 0.15,
+                    joinstyle="round",
+                )
+            )
+
+
+def _lake_polys(atlas: dict | None, key: str) -> list:
+    if atlas and key in (atlas.get("lakes") or {}):
+        polys = list(atlas["lakes"][key])
+        for bay in atlas.get("bays") or []:
+            if bay.get("parent") == key:
+                polys.extend(bay.get("polys") or [])
+        return polys
+    ring = [[float(x), float(y)] for x, y in LAKE_POLYS[key]]
+    return [[ring]]
+
+
+def _draw_basemap(ax, proj: Albers, atlas: dict | None, water: str = ATLAS_WATER) -> None:
+    if atlas:
+        for feat in atlas.get("land") or []:
+            _add_polys(ax, proj, feat.get("polys") or [], ATLAS_LAND, ATLAS_LAND_EDGE, 0.4, 1.0, islands=False)
+        for feat in atlas.get("context") or []:
+            _add_polys(ax, proj, feat.get("polys") or [], water, ATLAS_WATER_EDGE, 0.3, 1.6, islands=False)
+        _add_polys(ax, proj, atlas.get("channels", {}).get("polys") or [], water, ATLAS_WATER_EDGE, 0.45, 1.7, islands=False)
+        for feat in atlas.get("channels", {}).get("lines") or []:
+            if feat.get("name") == "Detroit":
+                continue
+            line = feat.get("line") or []
+            if len(line) < 2:
+                continue
+            xs, ys = proj.vec([p[0] for p in line], [p[1] for p in line])
+            ax.plot(xs, ys, color=ATLAS_WATER_EDGE, lw=1.7, solid_capstyle="round", zorder=1.8, alpha=0.85)
+        for line in atlas.get("border") or []:
+            if len(line) < 2:
+                continue
+            xs, ys = proj.vec([p[0] for p in line], [p[1] for p in line])
+            ax.plot(xs, ys, color="#8a7058", lw=0.7, ls=(0, (5, 2.4)), zorder=2.0, alpha=0.7)
+    else:
+        for key in LAKE_POLYS:
+            _add_polys(ax, proj, _lake_polys(None, key), water, ATLAS_WATER_EDGE, 0.5, 1.5)
+
+
+def _set_atlas_extent(ax, proj: Albers) -> None:
+    lons = np.linspace(-92.85, -75.55, 36)
+    lats = np.linspace(41.08, 49.58, 36)
+    xs: list[float] = []
+    ys: list[float] = []
+    for lat in (41.08, 49.58):
+        x, y = proj.vec(lons, np.full_like(lons, lat))
+        xs.extend(x.tolist())
+        ys.extend(y.tolist())
+    for lon in (-92.85, -75.55):
+        x, y = proj.vec(np.full_like(lats, lon), lats)
+        xs.extend(x.tolist())
+        ys.extend(y.tolist())
+    pad_x = (max(xs) - min(xs)) * 0.012
+    pad_y = (max(ys) - min(ys)) * 0.012
+    ax.set_xlim(min(xs) - pad_x, max(xs) + pad_x)
+    ax.set_ylim(min(ys) - pad_y, max(ys) + pad_y)
+    ax.set_aspect("equal")
+
+
+def _draw_graticule(ax, proj: Albers) -> None:
+    lon0, lon1 = -92, -76
+    lat0, lat1 = 42, 49
+    for lon in range(lon0, lon1 + 1, 2):
+        lats = np.linspace(41.1, 49.55, 70)
+        xs, ys = proj.vec(np.full_like(lats, lon), lats)
+        ax.plot(xs, ys, color="#8d7b64", lw=0.35, alpha=0.28, zorder=3.2, solid_capstyle="round")
+        if lon <= -92:
+            continue
+        x, y = proj.xy(lon, 41.22)
+        hemi = "W" if lon < 0 else "E"
+        ax.text(x, y, f"{abs(lon)}°{hemi}", ha="center", va="top", fontsize=6.5, color="#6d5e4c", zorder=7, clip_on=True)
+    for lat in range(lat0, lat1 + 1, 2):
+        lons = np.linspace(-92.8, -75.6, 70)
+        xs, ys = proj.vec(lons, np.full_like(lons, lat))
+        ax.plot(xs, ys, color="#8d7b64", lw=0.35, alpha=0.28, zorder=3.2, solid_capstyle="round")
+        x, y = proj.xy(-92.55, lat)
+        ax.text(x, y, f"{lat}°N", ha="left", va="center", fontsize=6.5, color="#6d5e4c", zorder=7, clip_on=True)
+
+
+def _draw_scale_and_north(ax, proj: Albers) -> None:
+    x0, y0 = proj.xy(-90.55, 41.55)
+    length = 200_000
+    h = 8_000
+    ax.add_patch(Rectangle((x0, y0), length / 2, h, facecolor=ATLAS_INK, edgecolor=ATLAS_INK, lw=0.4, zorder=8))
+    ax.add_patch(Rectangle((x0 + length / 2, y0), length / 2, h, facecolor=ATLAS_PAPER, edgecolor=ATLAS_INK, lw=0.6, zorder=8))
+    ax.plot([x0, x0 + length], [y0, y0], color=ATLAS_INK, lw=0.6, zorder=8)
+    for i, lab in enumerate(("0", "100", "200 km")):
+        x = x0 + i * length / 2
+        ax.text(x, y0 - 7_000, lab, ha="center", va="top", fontsize=6.5, color=ATLAS_INK, zorder=8)
+    nx, ny = proj.xy(-90.55, 42.12)
+    ax.add_patch(FancyArrow(nx, ny, 0, 42_000, width=3_800, head_width=12_000, head_length=16_000, length_includes_head=True, facecolor=ATLAS_INK, edgecolor=ATLAS_INK, zorder=8))
+    ax.text(nx, ny + 48_000, "N", ha="center", va="bottom", fontsize=8, fontweight="bold", color=ATLAS_INK, zorder=8)
+
+
+def _draw_cities(ax, proj: Albers) -> None:
+    for name, lat, lon, dx, dy in ATLAS_CITIES:
+        x, y = proj.xy(lon, lat)
+        ax.plot(x, y, "o", ms=2.4, color=ATLAS_INK, markeredgecolor="white", markeredgewidth=0.5, zorder=6)
+        ax.annotate(
+            name,
+            (x, y),
+            textcoords="offset points",
+            xytext=(dx, dy),
+            fontsize=6.2,
+            color="#3d4c54",
+            zorder=6,
+            path_effects=_HALO,
+        )
+
+
+def _new_atlas_axes(title: str, *, water: str = ATLAS_WATER):
+    fig = plt.figure(figsize=(11.7, 8.15), dpi=155, facecolor=ATLAS_PAPER)
+    gs = fig.add_gridspec(2, 1, height_ratios=[1.0, 0.055], hspace=0.10, left=0.045, right=0.975, top=0.915, bottom=0.075)
+    ax = fig.add_subplot(gs[0])
+    cax = fig.add_subplot(gs[1])
+    proj = Albers()
+    atlas = _load_atlas()
+    ax.set_facecolor(ATLAS_LAND)
+    _set_atlas_extent(ax, proj)
+    _draw_basemap(ax, proj, atlas, water=water)
+    _draw_graticule(ax, proj)
+    _draw_scale_and_north(ax, proj)
+    _draw_cities(ax, proj)
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    for spine in ax.spines.values():
+        spine.set_color(ATLAS_INK)
+        spine.set_linewidth(1.35)
+    fig.suptitle(title, fontsize=13.5, color=ATLAS_INK, fontweight="bold", fontfamily="serif", y=0.975)
+    cax.set_facecolor(ATLAS_PAPER)
+    for spine in cax.spines.values():
+        spine.set_visible(False)
+    cax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    ax.text(
+        0.995,
+        0.012,
+        "Albers equal-area  ·  Natural Earth 1:10m",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=6.2,
+        color="#6d5e4c",
+        zorder=8,
+    )
+    return fig, ax, cax, proj, atlas
+
+
+def _style_colorbar(cb, label: str) -> None:
+    cb.set_label(label, fontsize=8.5, color="#3d4c54")
+    cb.ax.tick_params(labelsize=7.5, colors="#3d4c54", length=3)
+    cb.outline.set_edgecolor("#8a7a66")
+    cb.outline.set_linewidth(0.5)
+
+
+def _label_xy(proj: Albers, key: str) -> tuple[float, float]:
+    lat, lon = LAKE_LABELS.get(key) or LAKE_POINTS[key]
+    return proj.xy(lon, lat)
+
+
+def _lake_label(ax, proj: Albers, key: str, text: str, *, fontsize: float = 7.4) -> None:
+    x, y = _label_xy(proj, key)
+    if key in LAKE_LEADERS:
+        lat, lon = LAKE_LEADERS[key]
+        x2, y2 = proj.xy(lon, lat)
+        ax.plot([x, x2], [y, y2], color=ATLAS_INK, lw=0.55, zorder=6.4, solid_capstyle="round")
+        ax.plot(x2, y2, "o", ms=2.1, color=ATLAS_INK, zorder=6.5)
+    ax.text(
+        x,
+        y,
+        text,
+        ha="center",
+        va="center",
+        fontsize=fontsize,
+        color=ATLAS_INK,
+        zorder=7,
+        fontweight="bold",
+        linespacing=1.25,
+        path_effects=_HALO,
+    )
+
+
+def _station_dots(ax, proj: Albers, points: list, *, color=ATLAS_INK, size: float = 3.1) -> None:
+    for lon, lat in points:
+        x, y = proj.xy(lon, lat)
+        ax.plot(x, y, "o", color=color, markersize=size, markeredgecolor="white", markeredgewidth=0.55, zorder=5.5)
 
 
 def _cmap_color(val: float, vmin: float, vmax: float, cmap_name: str) -> tuple:
@@ -1183,69 +1497,61 @@ def _cmap_color(val: float, vmin: float, vmax: float, cmap_name: str) -> tuple:
 
 def render_map_levels(snap: dict) -> None:
     print("Rendering levels map…")
-    fig, ax = plt.subplots(figsize=(11.2, 7.2), dpi=120)
-    _draw_lakes(ax)
-    _style_map(ax, "Water levels vs Low Water Datum (IGLD 1985)")
-    # Color lakes by vs LWD
+    fig, ax, cax, proj, atlas = _new_atlas_axes("Water levels vs Low Water Datum (IGLD 1985)")
     vs_vals = [snap["lakes"][k].get("vs_lwd_cm") for k in LAKE_POLYS if snap["lakes"].get(k, {}).get("vs_lwd_cm") is not None]
     vmin, vmax = (-40, 80) if not vs_vals else (min(-10, min(vs_vals) - 5), max(40, max(vs_vals) + 5))
-    for key, poly in LAKE_POLYS.items():
-        vs = (snap["lakes"].get(key) or {}).get("vs_lwd_cm")
+    for key in LAKE_POLYS:
+        lake = snap["lakes"].get(key) or {}
+        vs = lake.get("vs_lwd_cm")
         if vs is None:
             continue
         color = _cmap_color(vs, vmin, vmax, "RdYlBu_r")
-        ax.add_patch(Polygon([(x, y) for x, y in poly], closed=True, facecolor=color, edgecolor="#1a3a4a", linewidth=0.9, zorder=2, alpha=0.85))
-        lat, lon = LAKE_POINTS[key]
-        lake = snap["lakes"][key]
+        _add_polys(ax, proj, _lake_polys(atlas, key), color, ATLAS_WATER_EDGE, 0.55, 3.0)
         a, _ = _arrow(lake.get("d24_cm"), 0.4)
-        label = f"{lake['label']}\n{lake['igld85']:.2f} m\n{lake['vs_lwd_cm']:+.0f} cm {a}"
-        ax.text(lon, lat, label, ha="center", va="center", fontsize=7.5, color="#1a3a4a", zorder=5, fontweight="bold")
-
-    for s in snap["stations"]:
-        if s.get("lon") is None or s.get("lat") is None or s.get("igld85") is None:
-            continue
-        ax.plot(s["lon"], s["lat"], "o", color="#1a3a4a", markersize=3.2, zorder=4)
-    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("RdYlBu_r"), norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        igld = lake.get("igld85")
+        igld_s = "" if igld is None else f"{igld:.2f} m"
+        _lake_label(ax, proj, key, f"{lake.get('label', key)}\n{igld_s}\n{vs:+.0f} cm {a}")
+    _station_dots(
+        ax,
+        proj,
+        [(s["lon"], s["lat"]) for s in snap["stations"] if s.get("lon") is not None and s.get("lat") is not None and s.get("igld85") is not None],
+    )
+    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("RdYlBu_r"), norm=Normalize(vmin=vmin, vmax=vmax))
     sm.set_array([])
-    cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
-    cb.set_label("cm above (+) / below (−) LWD", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(MAP_LEVELS, bbox_inches="tight", facecolor="white")
+    cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
+    _style_colorbar(cb, "Centimetres above (+) / below (−) Low Water Datum")
+    fig.savefig(MAP_LEVELS, facecolor=fig.get_facecolor())
     plt.close(fig)
 
 
 def render_map_temps(snap: dict) -> None:
     print("Rendering temperature map…")
-    fig, ax = plt.subplots(figsize=(11.2, 7.2), dpi=120)
-    _draw_lakes(ax, facecolor="#d9e6ec")
-    _style_map(ax, "Surface water temperature (GLSEA + buoys)")
+    fig, ax, cax, proj, atlas = _new_atlas_axes("Surface water temperature (GLSEA + buoys)")
     temps = [snap["lakes"][k].get("sst_c") for k in LAKE_POLYS if snap["lakes"].get(k, {}).get("sst_c") is not None]
     vmin, vmax = (0, 25) if not temps else (min(temps) - 1, max(temps) + 1)
-    for key, poly in LAKE_POLYS.items():
-        sst = (snap["lakes"].get(key) or {}).get("sst_c")
+    for key in LAKE_POLYS:
+        lake = snap["lakes"].get(key) or {}
+        sst = lake.get("sst_c")
         if sst is None:
             continue
         color = _cmap_color(sst, vmin, vmax, "YlOrRd")
-        ax.add_patch(Polygon([(x, y) for x, y in poly], closed=True, facecolor=color, edgecolor="#1a3a4a", linewidth=0.9, zorder=2, alpha=0.9))
-        lat, lon = LAKE_POINTS[key]
-        lake = snap["lakes"][key]
+        _add_polys(ax, proj, _lake_polys(atlas, key), color, ATLAS_WATER_EDGE, 0.55, 3.0)
         a, _ = _arrow(lake.get("sst_d7_c"), 0.15)
         ly = lake.get("sst_vs_ly_c")
         ly_s = "" if ly is None else f"\nvs LY {ly:+.1f}°"
-        ax.text(lon, lat, f"{lake['label']}\n{sst:.1f}°C {a}{ly_s}", ha="center", va="center", fontsize=7.5, color="#1a3a4a", zorder=5, fontweight="bold")
-
+        _lake_label(ax, proj, key, f"{lake.get('label', key)}\n{sst:.1f}°C {a}{ly_s}")
     for b in snap["ndbc"]:
         wt = b.get("wtemp_c")
-        if wt is None or not (0.0 <= wt <= 32.0):
+        if wt is None or not (0.0 <= wt <= 32.0) or b.get("lon") is None:
             continue
-        ax.plot(b["lon"], b["lat"], "o", color="#1a3a4a", markersize=4, zorder=4)
-        ax.text(b["lon"] + 0.12, b["lat"] + 0.08, f"{b['wtemp_c']:.1f}°", fontsize=6, color="#243036", zorder=5)
-    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("YlOrRd"), norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        x, y = proj.xy(b["lon"], b["lat"])
+        ax.plot(x, y, "o", color=ATLAS_INK, markersize=3.6, markeredgecolor="white", markeredgewidth=0.5, zorder=5.5)
+        ax.text(x + 8_000, y + 6_000, f"{wt:.1f}°", fontsize=6, color="#243036", zorder=6, path_effects=_HALO)
+    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("YlOrRd"), norm=Normalize(vmin=vmin, vmax=vmax))
     sm.set_array([])
-    cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
-    cb.set_label("Lake-average SST (°C)", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(MAP_TEMPS, bbox_inches="tight", facecolor="white")
+    cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
+    _style_colorbar(cb, "Lake-average SST (°C)")
+    fig.savefig(MAP_TEMPS, facecolor=fig.get_facecolor())
     plt.close(fig)
 
 
@@ -1261,79 +1567,91 @@ def _wind_uv(speed: float | None, direction_from: float | None) -> tuple[float, 
 
 def render_map_winds(snap: dict) -> None:
     print("Rendering wind map…")
-    fig, ax = plt.subplots(figsize=(11.2, 7.2), dpi=120)
-    _draw_lakes(ax, facecolor="#cfe0e8")
-    _style_map(ax, "Winds over the lakes (Open-Meteo + NDBC)")
-    speeds = []
+    fig, ax, cax, proj, atlas = _new_atlas_axes("Winds over the lakes (Open-Meteo + NDBC)")
+    for key in LAKE_POLYS:
+        _add_polys(ax, proj, _lake_polys(atlas, key), "#9fc0d0", ATLAS_WATER_EDGE, 0.55, 3.0)
+    k = 9_000  # metres on the map per m/s
     for key, pt in LAKE_POINTS.items():
         w = snap["lakes"][key]
         uv = _wind_uv(w.get("wind_ms"), w.get("wind_dir"))
         if not uv:
             continue
-        speeds.append(w["wind_ms"])
-        lat, lon = pt
+        x, y = proj.xy(pt[1], pt[0])
         ax.annotate(
             "",
-            xy=(lon + uv[0] * 0.12, lat + uv[1] * 0.12),
-            xytext=(lon, lat),
-            arrowprops=dict(arrowstyle="-|>", color="#1a3a4a", lw=1.8),
-            zorder=5,
+            xy=(x + uv[0] * k, y + uv[1] * k),
+            xytext=(x, y),
+            arrowprops=dict(arrowstyle="-|>", color=ATLAS_INK, lw=1.7, mutation_scale=11),
+            zorder=6,
         )
-        a, _ = _arrow(None, 1)  # unused
-        ax.text(lon, lat - 0.35, f"{w['label']}\n{w['wind_ms']:.1f} m/s", ha="center", fontsize=7, color="#1a3a4a", zorder=5)
-
+        ax.text(
+            x,
+            y - 28_000,
+            f"{w['label']}\n{w['wind_ms']:.1f} m/s",
+            ha="center",
+            fontsize=7,
+            color=ATLAS_INK,
+            zorder=7,
+            path_effects=_HALO,
+        )
     for b in snap["ndbc"]:
         uv = _wind_uv(b.get("wind_ms"), b.get("wind_dir"))
-        if not uv:
+        if not uv or b.get("lon") is None:
             continue
+        x, y = proj.xy(b["lon"], b["lat"])
         ax.annotate(
             "",
-            xy=(b["lon"] + uv[0] * 0.10, b["lat"] + uv[1] * 0.10),
-            xytext=(b["lon"], b["lat"]),
-            arrowprops=dict(arrowstyle="-|>", color="#c45c26", lw=1.1),
-            zorder=4,
+            xy=(x + uv[0] * k * 0.85, y + uv[1] * k * 0.85),
+            xytext=(x, y),
+            arrowprops=dict(arrowstyle="-|>", color="#c45c26", lw=1.05, mutation_scale=8),
+            zorder=5.6,
         )
-        ax.plot(b["lon"], b["lat"], "o", color="#c45c26", markersize=3, zorder=4)
-    ax.text(-92.3, 41.45, "Black arrows: Open-Meteo 10 m wind at lake centres. Orange: NDBC buoys. Arrow points downwind.", fontsize=7.5, color="#5a7a86")
-    fig.tight_layout()
-    fig.savefig(MAP_WINDS, bbox_inches="tight", facecolor="white")
+        ax.plot(x, y, "o", color="#c45c26", markersize=3, markeredgecolor="white", markeredgewidth=0.4, zorder=5.7)
+    cax.text(
+        0.5,
+        0.45,
+        "Black arrows: Open-Meteo 10 m wind at lake centres.  Orange: NDBC buoys.  Arrow points downwind.",
+        ha="center",
+        va="center",
+        fontsize=8,
+        color="#3d4c54",
+        transform=cax.transAxes,
+    )
+    fig.savefig(MAP_WINDS, facecolor=fig.get_facecolor())
     plt.close(fig)
 
 
 def render_map_conditions(snap: dict) -> None:
     print("Rendering conditions / water-quality map…")
-    fig, ax = plt.subplots(figsize=(11.2, 7.2), dpi=120)
-    _draw_lakes(ax, facecolor="#d9e6ec")
-    _style_map(ax, "Surface conditions: SST vs last year, waves")
+    fig, ax, cax, proj, atlas = _new_atlas_axes("Surface conditions: SST vs last year, waves")
     anoms = [snap["lakes"][k].get("sst_vs_ly_c") for k in LAKE_POLYS if snap["lakes"].get(k, {}).get("sst_vs_ly_c") is not None]
     vmin, vmax = (-4, 4) if not anoms else (min(-3, min(anoms)), max(3, max(anoms)))
-    for key, poly in LAKE_POLYS.items():
+    for key in LAKE_POLYS:
         lake = snap["lakes"].get(key) or {}
         anom = lake.get("sst_vs_ly_c")
-        color = "#c5dce4" if anom is None else _cmap_color(anom, vmin, vmax, "RdBu_r")
-        ax.add_patch(Polygon([(x, y) for x, y in poly], closed=True, facecolor=color, edgecolor="#1a3a4a", linewidth=0.9, zorder=2, alpha=0.9))
-        lat, lon = LAKE_POINTS[key]
+        color = ATLAS_WATER if anom is None else _cmap_color(anom, vmin, vmax, "RdBu_r")
+        _add_polys(ax, proj, _lake_polys(atlas, key), color, ATLAS_WATER_EDGE, 0.55, 3.0)
         a, _ = _arrow(lake.get("sst_d7_c"), 0.15)
         wave = lake.get("wvht_m")
         wave_s = "waves n/a" if wave is None else f"waves {wave:.1f} m"
         sst = lake.get("sst_c")
         sst_s = "SST n/a" if sst is None else f"{sst:.1f}°C"
         ly = "n/a" if anom is None else f"{anom:+.1f}° vs LY"
-        ax.text(lon, lat, f"{lake.get('label', key)}\n{sst_s} {a}\n{ly}\n{wave_s}", ha="center", va="center", fontsize=7, color="#1a3a4a", zorder=5, fontweight="bold")
-
+        fs = 6.6 if key == "st_clair" else 7.2
+        _lake_label(ax, proj, key, f"{lake.get('label', key)}\n{sst_s} {a}\n{ly}\n{wave_s}", fontsize=fs)
     for b in snap["ndbc"]:
-        if b.get("wvht_m") is None:
+        if b.get("wvht_m") is None or b.get("lon") is None:
             continue
         if not str(b.get("id", "")).startswith(("4500", "4501", "451")):
             continue
-        ax.plot(b["lon"], b["lat"], "o", color="#1a3a4a", markersize=4, zorder=4)
-        ax.text(b["lon"] + 0.1, b["lat"] + 0.08, f"{b['wvht_m']:.1f} m", fontsize=6, color="#243036")
-    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("RdBu_r"), norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        x, y = proj.xy(b["lon"], b["lat"])
+        ax.plot(x, y, "o", color=ATLAS_INK, markersize=3.5, markeredgecolor="white", markeredgewidth=0.5, zorder=5.5)
+        ax.text(x + 8_000, y + 6_000, f"{b['wvht_m']:.1f} m", fontsize=6, color="#243036", zorder=6, path_effects=_HALO)
+    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("RdBu_r"), norm=Normalize(vmin=vmin, vmax=vmax))
     sm.set_array([])
-    cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
-    cb.set_label("SST anomaly vs same day last year (°C)", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(MAP_COND, bbox_inches="tight", facecolor="white")
+    cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
+    _style_colorbar(cb, "SST anomaly vs same day last year (°C)")
+    fig.savefig(MAP_COND, facecolor=fig.get_facecolor())
     plt.close(fig)
 
 
@@ -1506,6 +1824,37 @@ def render_html(snap: dict) -> None:
                 </div>"""
         )
 
+    hero_html = []
+    for key in ("superior", "michigan", "huron", "st_clair", "erie", "ontario"):
+        lake = lakes.get(key) or {}
+        igld = lake.get("igld85")
+        vs = lake.get("vs_lwd_cm")
+        sst = lake.get("sst_c")
+        d7 = lake.get("d7_cm")
+        rising = None if d7 is None else (True if d7 > 1.0 else False if d7 < -1.0 else None)
+        daily = lake.get("daily") or []
+        spark_vals = [r["igld85"] for r in daily[-8:] if r.get("igld85") is not None]
+        spark = sparkline_svg(spark_vals, rising=rising)
+        vs_s = "—" if vs is None else f"{vs:+.0f} cm vs LWD"
+        vs_cls = "hero-vs up" if vs is not None and vs >= 0 else "hero-vs down" if vs is not None else "hero-vs"
+        sst_s = "—" if sst is None else f"{sst:.1f}°"
+        ly = lake.get("sst_vs_ly_c")
+        hero_html.append(
+            f"""
+                      <div class="hero-lake">
+                        <p class="hero-name">{_esc(lake.get('label') or key)}</p>
+                        <p class="hero-level">{'—' if igld is None else f'{igld:.2f}'}<span> m</span></p>
+                        <p class="{vs_cls}">{vs_s}</p>
+                        {spark}
+                        <div class="hero-stats">
+                          <span>24h</span><span>{ticker_markup(lake.get('d24_cm'), flat=0.4, digits=1, unit=' cm')}</span>
+                          <span>7d</span><span>{ticker_markup(d7, flat=1.0, digits=1, unit=' cm')}</span>
+                          <span>Temp</span><span>{sst_s} {ticker_markup(lake.get('sst_d7_c'), flat=0.15, digits=1, unit='°')}</span>
+                          <span>vs LY</span><span>{'' if ly is None else f'{ly:+.1f}°'}</span>
+                        </div>
+                      </div>"""
+        )
+
     # Status: how many lakes above LWD
     above = [k for k, v in lakes.items() if v.get("vs_lwd_cm") is not None and v["vs_lwd_cm"] >= 0]
     below = [k for k, v in lakes.items() if v.get("vs_lwd_cm") is not None and v["vs_lwd_cm"] < 0]
@@ -1625,6 +1974,20 @@ def render_html(snap: dict) -> None:
     .gauge-fresh-age.fresh-stale {{ color:#e07a5f; }}
     .gauge-fresh-age.fresh-unknown {{ color:#b7d0da; }}
     .gauge-fresh-when {{ margin:2px 0 0 0; font-size:10px; color:#7a96a3; line-height:1.25; }}
+    .hero-bar {{ margin:16px 0 0 0; display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }}
+    .hero-lake {{ min-width:0; background:rgba(255,255,255,0.06); border:1px solid rgba(142,184,200,0.28); border-radius:8px; padding:10px 12px 8px; box-sizing:border-box; }}
+    .hero-name {{ margin:0 0 4px 0; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#8eb8c8; }}
+    .hero-level {{ margin:0; font-family:Arial,Helvetica,sans-serif; font-size:20px; font-weight:700; color:#ffffff; line-height:1.1; font-variant-numeric:tabular-nums; }}
+    .hero-level span {{ font-size:11px; font-weight:600; color:#8eb8c8; }}
+    .hero-vs {{ margin:3px 0 6px 0; font-size:11px; }}
+    .hero-vs.up {{ color:#7dcea0; }}
+    .hero-vs.down {{ color:#e07a5f; }}
+    .hero-spark {{ display:block; width:100%; height:22px; margin:0 0 6px 0; }}
+    .hero-stats {{ display:grid; grid-template-columns:36px 1fr; gap:2px 8px; font-size:11px; color:#b7d0da; line-height:1.35; text-transform:none; }}
+    .hero-stats > span:nth-child(odd) {{ color:#8eb8c8; letter-spacing:0.04em; text-transform:uppercase; font-size:10px; }}
+    .hero-stats > span:nth-child(even) {{ text-transform:none; }}
+    .hero-bar .ticker {{ margin-top:0; font-size:11px; }}
+    .hero-bar .ticker.flat {{ font-size:11px; }}
     .data-table {{ width:100%; border-collapse:collapse; font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#243036; }}
     .data-table th {{ text-align:left; padding:8px 6px; border-bottom:2px solid #d5dde3; color:#5a7a86; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }}
     .data-table td {{ padding:7px 6px; border-bottom:1px solid #e4ebef; }}
@@ -1659,10 +2022,12 @@ def render_html(snap: dict) -> None:
       .history-year {{ font-size:32px; }}
       .history-event {{ max-width:90%; font-size:12px; }}
       .gauge-fresh {{ flex:1 1 calc(50% - 8px); }}
+      .hero-bar {{ grid-template-columns:repeat(2, 1fr); }}
     }}
     @media (max-width:420px) {{
       .kpi-grid {{ grid-template-columns:1fr; }}
       .kpi-value {{ font-size:22px; }}
+      .hero-bar {{ grid-template-columns:1fr; }}
     }}
   </style>
 </head>
@@ -1686,6 +2051,9 @@ def render_html(snap: dict) -> None:
                       <div class="data-fresh-row">
                       {''.join(fresh_html)}
                       </div>
+                    </div>
+                    <div class="hero-bar" aria-label="Lake level and temperature trends">
+                      {''.join(hero_html)}
                     </div>
             </td>
           </tr>
@@ -1760,7 +2128,7 @@ def render_html(snap: dict) -> None:
           <tr>
             <td id="levels" style="padding:8px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
               <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Levels map</h2>
-              <p style="margin:0 0 12px 0;font-size:15px;">Lake fill is centimetres versus Low Water Datum. Dots are CHS gauges. Trend mark is 24-hour change.</p>
+              <p style="margin:0 0 12px 0;font-size:15px;">Lake fill is centimetres versus Low Water Datum on an Albers equal-area plate. Shorelines are Natural Earth 1:10 million, including islands and bays. Dots are CHS / NOAA gauges. Trend mark is 24-hour change.</p>
             </td>
           </tr>
           <tr>
@@ -1790,7 +2158,7 @@ def render_html(snap: dict) -> None:
           <tr>
             <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
               <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Temperature map</h2>
-              <p style="margin:0 0 12px 0;font-size:15px;">Fill is NOAA CoastWatch GLSEA lake-average SST. Dots are NDBC buoy water temperatures. Trend is the 7-day GLSEA change; vs LY is the same day last year.</p>
+              <p style="margin:0 0 12px 0;font-size:15px;">Fill is NOAA CoastWatch GLSEA lake-average SST on the same atlas base. Dots are NDBC buoy water temperatures. Trend is the 7-day GLSEA change; vs LY is the same day last year.</p>
             </td>
           </tr>
           <tr>
@@ -1809,7 +2177,7 @@ def render_html(snap: dict) -> None:
           <tr>
             <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
               <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Wind map</h2>
-              <p style="margin:0 0 12px 0;font-size:15px;">Arrows point downwind. Lake-centre winds are Open-Meteo 10 m; orange arrows are NDBC buoys.</p>
+              <p style="margin:0 0 12px 0;font-size:15px;">Arrows point downwind on the atlas plate. Lake-centre winds are Open-Meteo 10 m; orange arrows are NDBC buoys.</p>
             </td>
           </tr>
           <tr>
@@ -1924,7 +2292,7 @@ def render_html(snap: dict) -> None:
           </tr>
           <tr>
             <td style="padding:20px 32px 28px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#5a7078;">
-              <p style="margin:0 0 8px 0;"><strong>Data:</strong> Water levels from the <a href="https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service" style="color:#2f6f7e;">Canadian Hydrographic Service IWLS API</a> (licence: <a href="https://tides.gc.ca/en/licence-agreement" style="color:#2f6f7e;">tides.gc.ca licence</a>). U.S. gauges and the century animation: NOAA CO-OPS monthly means (IGLD 1985). SST: NOAA GLERL/CoastWatch GLSEA. Winds/waves: Open-Meteo and NDBC. Profile graphic modified from Michigan Sea Grant; not to scale.</p>
+              <p style="margin:0 0 8px 0;"><strong>Data:</strong> Water levels from the <a href="https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service" style="color:#2f6f7e;">Canadian Hydrographic Service IWLS API</a> (licence: <a href="https://tides.gc.ca/en/licence-agreement" style="color:#2f6f7e;">tides.gc.ca licence</a>). U.S. gauges and the century animation: NOAA CO-OPS monthly means (IGLD 1985). SST: NOAA GLERL/CoastWatch GLSEA. Winds/waves: Open-Meteo and NDBC. Map shorelines: Natural Earth (public domain). Profile graphic modified from Michigan Sea Grant; not to scale.</p>
               <p style="margin:0;">Provisional public data for awareness only — not for navigation or flood warning. In case of disparity, official CHS publications prevail. Quality flags follow UNESCO IOC standards on IWLS points.</p>
             </td>
           </tr>
@@ -1988,16 +2356,15 @@ def main() -> None:
         snap = json.loads(SNAPSHOT.read_text())
         if isinstance(snap.get("generated"), str):
             snap["generated"] = _parse_iso(snap["generated"]) or datetime.now(timezone.utc)
-        render_profile(snap)
     else:
         snap = build_snapshot()
         SNAPSHOT.write_text(json.dumps(_json_ready(snap), indent=2))
-        render_profile(snap)
-        render_map_levels(snap)
-        render_map_temps(snap)
-        render_map_winds(snap)
-        render_map_conditions(snap)
-        render_level_chart(snap)
+    render_profile(snap)
+    render_map_levels(snap)
+    render_map_temps(snap)
+    render_map_winds(snap)
+    render_map_conditions(snap)
+    render_level_chart(snap)
     if skip_history:
         print("Skipping history fetch")
     else:

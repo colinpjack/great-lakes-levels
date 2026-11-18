@@ -28,6 +28,20 @@
     .gauge-fresh-age.fresh-stale { color:#e07a5f; }
     .gauge-fresh-age.fresh-unknown { color:#b7d0da; }
     .gauge-fresh-when { margin:2px 0 0 0; font-size:10px; color:#7a96a3; line-height:1.25; }
+    .hero-bar { margin:16px 0 0 0; display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+    .hero-lake { min-width:0; background:rgba(255,255,255,0.06); border:1px solid rgba(142,184,200,0.28); border-radius:8px; padding:10px 12px 8px; box-sizing:border-box; }
+    .hero-name { margin:0 0 4px 0; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#8eb8c8; }
+    .hero-level { margin:0; font-family:Arial,Helvetica,sans-serif; font-size:20px; font-weight:700; color:#ffffff; line-height:1.1; font-variant-numeric:tabular-nums; }
+    .hero-level span { font-size:11px; font-weight:600; color:#8eb8c8; }
+    .hero-vs { margin:3px 0 6px 0; font-size:11px; }
+    .hero-vs.up { color:#7dcea0; }
+    .hero-vs.down { color:#e07a5f; }
+    .hero-spark { display:block; width:100%; height:22px; margin:0 0 6px 0; }
+    .hero-stats { display:grid; grid-template-columns:36px 1fr; gap:2px 8px; font-size:11px; color:#b7d0da; line-height:1.35; text-transform:none; }
+    .hero-stats > span:nth-child(odd) { color:#8eb8c8; letter-spacing:0.04em; text-transform:uppercase; font-size:10px; }
+    .hero-stats > span:nth-child(even) { text-transform:none; }
+    .hero-bar .ticker { margin-top:0; font-size:11px; }
+    .hero-bar .ticker.flat { font-size:11px; }
     .data-table { width:100%; border-collapse:collapse; font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#243036; }
     .data-table th { text-align:left; padding:8px 6px; border-bottom:2px solid #d5dde3; color:#5a7a86; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
     .data-table td { padding:7px 6px; border-bottom:1px solid #e4ebef; }
@@ -62,17 +76,19 @@
       .history-year { font-size:32px; }
       .history-event { max-width:90%; font-size:12px; }
       .gauge-fresh { flex:1 1 calc(50% - 8px); }
+      .hero-bar { grid-template-columns:repeat(2, 1fr); }
     }
     @media (max-width:420px) {
       .kpi-grid { grid-template-columns:1fr; }
       .kpi-value { font-size:22px; }
+      .hero-bar { grid-template-columns:1fr; }
     }
   </style>
 </head>
 <body style="margin:0;padding:0;background:#eef2f4;font-family:Georgia,'Times New Roman',serif;">
   <div id="chart-lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Full screen figure" onclick="if(event.target===this)closeChart()">
     <button type="button" class="lightbox-close" onclick="closeChart()" aria-label="Close">Close ✕</button>
-    <img id="lightbox-img" src="profile_overlay.png?v=e7369721" alt="Full screen figure">
+    <img id="lightbox-img" src="profile_overlay.png?v=8b6768e0" alt="Full screen figure">
     <div class="lightbox-hint">Click outside or press Esc to close</div>
   </div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f4;padding:24px 12px;">
@@ -113,6 +129,81 @@
                         <p class="gauge-fresh-age fresh-ok">Checking…</p>
                         <p class="gauge-fresh-when">2026-11-18 17:06 EDT</p>
                       </div>
+                      </div>
+                    </div>
+                    <div class="hero-bar" aria-label="Lake level and temperature trends">
+                      
+                      <div class="hero-lake">
+                        <p class="hero-name">Superior</p>
+                        <p class="hero-level">183.31<span> m</span></p>
+                        <p class="hero-vs up">+11 cm vs LWD</p>
+                        <svg class="hero-spark" width="100%" height="22" viewBox="0 0 84 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#8eb8c8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="1.0,8.4 12.7,20.0 24.4,19.4 36.1,15.7 47.9,12.7 59.6,2.0 71.3,8.4 83.0,15.1"/></svg>
+                        <div class="hero-stats">
+                          <span>24h</span><span><span class="ticker down" title="Change vs previous period">▼ -1.3 cm</span></span>
+                          <span>7d</span><span><span class="ticker flat" title="Little change">–</span></span>
+                          <span>Temp</span><span>7.9° <span class="ticker down" title="Change vs previous period">▼ -0.5°</span></span>
+                          <span>vs LY</span><span>+1.1°</span>
+                        </div>
+                      </div>
+                      <div class="hero-lake">
+                        <p class="hero-name">Michigan</p>
+                        <p class="hero-level">176.29<span> m</span></p>
+                        <p class="hero-vs up">+29 cm vs LWD</p>
+                        <svg class="hero-spark" width="100%" height="22" viewBox="0 0 84 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#7dcea0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="1.0,9.2 12.7,20.0 24.4,16.3 36.1,10.0 47.9,10.0 59.6,8.7 71.3,2.0 83.0,6.8"/></svg>
+                        <div class="hero-stats">
+                          <span>24h</span><span><span class="ticker down" title="Change vs previous period">▼ -3.5 cm</span></span>
+                          <span>7d</span><span><span class="ticker up" title="Change vs previous period">▲ +1.5 cm</span></span>
+                          <span>Temp</span><span>11.3° <span class="ticker down" title="Change vs previous period">▼ -1.2°</span></span>
+                          <span>vs LY</span><span>+2.1°</span>
+                        </div>
+                      </div>
+                      <div class="hero-lake">
+                        <p class="hero-name">Huron</p>
+                        <p class="hero-level">176.30<span> m</span></p>
+                        <p class="hero-vs up">+30 cm vs LWD</p>
+                        <svg class="hero-spark" width="100%" height="22" viewBox="0 0 84 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#7dcea0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="1.0,9.2 12.7,20.0 24.4,16.3 36.1,10.0 47.9,10.0 59.6,8.7 71.3,2.0 83.0,6.8"/></svg>
+                        <div class="hero-stats">
+                          <span>24h</span><span><span class="ticker down" title="Change vs previous period">▼ -3.5 cm</span></span>
+                          <span>7d</span><span><span class="ticker up" title="Change vs previous period">▲ +1.5 cm</span></span>
+                          <span>Temp</span><span>10.3° <span class="ticker down" title="Change vs previous period">▼ -1.0°</span></span>
+                          <span>vs LY</span><span>+2.2°</span>
+                        </div>
+                      </div>
+                      <div class="hero-lake">
+                        <p class="hero-name">St. Clair</p>
+                        <p class="hero-level">175.00<span> m</span></p>
+                        <p class="hero-vs up">+60 cm vs LWD</p>
+                        <svg class="hero-spark" width="100%" height="22" viewBox="0 0 84 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#e07a5f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="1.0,10.8 12.7,2.2 24.4,2.0 36.1,5.3 47.9,9.2 59.6,16.7 71.3,19.3 83.0,20.0"/></svg>
+                        <div class="hero-stats">
+                          <span>24h</span><span><span class="ticker down" title="Change vs previous period">▼ -0.4 cm</span></span>
+                          <span>7d</span><span><span class="ticker down" title="Change vs previous period">▼ -4.2 cm</span></span>
+                          <span>Temp</span><span>9.4° <span class="ticker down" title="Change vs previous period">▼ -2.4°</span></span>
+                          <span>vs LY</span><span>+2.3°</span>
+                        </div>
+                      </div>
+                      <div class="hero-lake">
+                        <p class="hero-name">Erie</p>
+                        <p class="hero-level">174.12<span> m</span></p>
+                        <p class="hero-vs up">+62 cm vs LWD</p>
+                        <svg class="hero-spark" width="100%" height="22" viewBox="0 0 84 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#e07a5f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="1.0,2.0 12.7,20.0 24.4,11.0 36.1,9.9 47.9,12.3 59.6,7.5 71.3,7.3 83.0,9.8"/></svg>
+                        <div class="hero-stats">
+                          <span>24h</span><span><span class="ticker down" title="Change vs previous period">▼ -0.8 cm</span></span>
+                          <span>7d</span><span><span class="ticker down" title="Change vs previous period">▼ -2.3 cm</span></span>
+                          <span>Temp</span><span>13.0° <span class="ticker down" title="Change vs previous period">▼ -1.6°</span></span>
+                          <span>vs LY</span><span>+3.4°</span>
+                        </div>
+                      </div>
+                      <div class="hero-lake">
+                        <p class="hero-name">Ontario</p>
+                        <p class="hero-level">74.65<span> m</span></p>
+                        <p class="hero-vs up">+45 cm vs LWD</p>
+                        <svg class="hero-spark" width="100%" height="22" viewBox="0 0 84 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#e07a5f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="1.0,4.0 12.7,2.0 24.4,10.4 36.1,15.2 47.9,16.4 59.6,18.3 71.3,20.0 83.0,19.3"/></svg>
+                        <div class="hero-stats">
+                          <span>24h</span><span><span class="ticker up" title="Change vs previous period">▲ +0.5 cm</span></span>
+                          <span>7d</span><span><span class="ticker down" title="Change vs previous period">▼ -4.9 cm</span></span>
+                          <span>Temp</span><span>11.0° <span class="ticker down" title="Change vs previous period">▼ -1.4°</span></span>
+                          <span>vs LY</span><span>+2.8°</span>
+                        </div>
                       </div>
                     </div>
             </td>
@@ -189,7 +280,7 @@
           </tr>
           <tr>
             <td style="padding:0 24px 16px 24px;" align="center">
-              <img src="profile_overlay.png?v=e7369721" width="932" class="chart-thumb" alt="Great Lakes system profile with live water levels overlaid — click to enlarge" onclick="openChart('profile_overlay.png?v=e7369721')" title="Click to view full screen">
+              <img src="profile_overlay.png?v=8b6768e0" width="932" class="chart-thumb" alt="Great Lakes system profile with live water levels overlaid — click to enlarge" onclick="openChart('profile_overlay.png?v=8b6768e0')" title="Click to view full screen">
             </td>
           </tr>
           <tr>
@@ -224,12 +315,12 @@
           <tr>
             <td id="levels" style="padding:8px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
               <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Levels map</h2>
-              <p style="margin:0 0 12px 0;font-size:15px;">Lake fill is centimetres versus Low Water Datum. Dots are CHS gauges. Trend mark is 24-hour change.</p>
+              <p style="margin:0 0 12px 0;font-size:15px;">Lake fill is centimetres versus Low Water Datum on an Albers equal-area plate. Shorelines are Natural Earth 1:10 million, including islands and bays. Dots are CHS / NOAA gauges. Trend mark is 24-hour change.</p>
             </td>
           </tr>
           <tr>
             <td style="padding:0 24px 16px 24px;" align="center">
-              <img src="map_levels.png?v=1b1c4531" width="932" class="chart-thumb" alt="Great Lakes map coloured by water level versus Low Water Datum" onclick="openChart('map_levels.png?v=1b1c4531')">
+              <img src="map_levels.png?v=9b24b0ef" width="932" class="chart-thumb" alt="Great Lakes map coloured by water level versus Low Water Datum" onclick="openChart('map_levels.png?v=9b24b0ef')">
             </td>
           </tr>
           <tr>
@@ -240,7 +331,7 @@
           </tr>
           <tr>
             <td style="padding:0 24px 16px 24px;" align="center">
-              <img src="chart_levels.png?v=fa813fc7" width="932" class="chart-thumb" alt="Thirty-day Great Lakes water levels versus Low Water Datum" onclick="openChart('chart_levels.png?v=fa813fc7')">
+              <img src="chart_levels.png?v=969c7d5f" width="932" class="chart-thumb" alt="Thirty-day Great Lakes water levels versus Low Water Datum" onclick="openChart('chart_levels.png?v=969c7d5f')">
             </td>
           </tr>
           <tr>
@@ -290,12 +381,12 @@
           <tr>
             <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
               <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Temperature map</h2>
-              <p style="margin:0 0 12px 0;font-size:15px;">Fill is NOAA CoastWatch GLSEA lake-average SST. Dots are NDBC buoy water temperatures. Trend is the 7-day GLSEA change; vs LY is the same day last year.</p>
+              <p style="margin:0 0 12px 0;font-size:15px;">Fill is NOAA CoastWatch GLSEA lake-average SST on the same atlas base. Dots are NDBC buoy water temperatures. Trend is the 7-day GLSEA change; vs LY is the same day last year.</p>
             </td>
           </tr>
           <tr>
             <td style="padding:0 24px 16px 24px;" align="center">
-              <img src="map_temps.png?v=53d44205" width="932" class="chart-thumb" alt="Great Lakes surface temperature map" onclick="openChart('map_temps.png?v=53d44205')">
+              <img src="map_temps.png?v=19a05622" width="932" class="chart-thumb" alt="Great Lakes surface temperature map" onclick="openChart('map_temps.png?v=19a05622')">
             </td>
           </tr>
           <tr>
@@ -345,12 +436,12 @@
           <tr>
             <td style="padding:16px 32px 8px 32px;font-family:Georgia,serif;font-size:16px;color:#243036;">
               <h2 style="margin:0 0 8px 0;font-size:20px;color:#1a3a4a;">Wind map</h2>
-              <p style="margin:0 0 12px 0;font-size:15px;">Arrows point downwind. Lake-centre winds are Open-Meteo 10 m; orange arrows are NDBC buoys.</p>
+              <p style="margin:0 0 12px 0;font-size:15px;">Arrows point downwind on the atlas plate. Lake-centre winds are Open-Meteo 10 m; orange arrows are NDBC buoys.</p>
             </td>
           </tr>
           <tr>
             <td style="padding:0 24px 16px 24px;" align="center">
-              <img src="map_winds.png?v=e1c8c177" width="932" class="chart-thumb" alt="Great Lakes wind map" onclick="openChart('map_winds.png?v=e1c8c177')">
+              <img src="map_winds.png?v=f9224128" width="932" class="chart-thumb" alt="Great Lakes wind map" onclick="openChart('map_winds.png?v=f9224128')">
             </td>
           </tr>
           <tr>
@@ -361,7 +452,7 @@
           </tr>
           <tr>
             <td style="padding:0 24px 16px 24px;" align="center">
-              <img src="map_conditions.png?v=1de3d7f2" width="932" class="chart-thumb" alt="Great Lakes surface condition map" onclick="openChart('map_conditions.png?v=1de3d7f2')">
+              <img src="map_conditions.png?v=7c4ad0d6" width="932" class="chart-thumb" alt="Great Lakes surface condition map" onclick="openChart('map_conditions.png?v=7c4ad0d6')">
             </td>
           </tr>
           <tr>
@@ -501,7 +592,7 @@
           </tr>
           <tr>
             <td style="padding:20px 32px 28px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#5a7078;">
-              <p style="margin:0 0 8px 0;"><strong>Data:</strong> Water levels from the <a href="https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service" style="color:#2f6f7e;">Canadian Hydrographic Service IWLS API</a> (licence: <a href="https://tides.gc.ca/en/licence-agreement" style="color:#2f6f7e;">tides.gc.ca licence</a>). U.S. gauges and the century animation: NOAA CO-OPS monthly means (IGLD 1985). SST: NOAA GLERL/CoastWatch GLSEA. Winds/waves: Open-Meteo and NDBC. Profile graphic modified from Michigan Sea Grant; not to scale.</p>
+              <p style="margin:0 0 8px 0;"><strong>Data:</strong> Water levels from the <a href="https://tides.gc.ca/en/web-services-offered-canadian-hydrographic-service" style="color:#2f6f7e;">Canadian Hydrographic Service IWLS API</a> (licence: <a href="https://tides.gc.ca/en/licence-agreement" style="color:#2f6f7e;">tides.gc.ca licence</a>). U.S. gauges and the century animation: NOAA CO-OPS monthly means (IGLD 1985). SST: NOAA GLERL/CoastWatch GLSEA. Winds/waves: Open-Meteo and NDBC. Map shorelines: Natural Earth (public domain). Profile graphic modified from Michigan Sea Grant; not to scale.</p>
               <p style="margin:0;">Provisional public data for awareness only — not for navigation or flood warning. In case of disparity, official CHS publications prevail. Quality flags follow UNESCO IOC standards on IWLS points.</p>
             </td>
           </tr>
